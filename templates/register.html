@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="text-center mb-4">
+            <div style="font-size:3rem;line-height:1;">🎮</div>
+            <h2 class="mt-2">用户注册</h2>
+            <p class="text-muted" style="font-size:0.8rem;letter-spacing:2px;">CREATE ACCOUNT</p>
+        </div>
+        <div class="card p-4">
+            <form method="post">
+                <div class="mb-3">
+                    <label>用户名</label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="background:rgba(0,220,255,0.07);border:1px solid var(--border);border-right:none;color:var(--text-muted);">
+                            <i class="bi bi-person"></i>
+                        </span>
+                        <input type="text" name="username" class="form-control" placeholder="可包含中文、英文、数字" required style="border-left:none;">
+                    </div>
+                    <div class="form-text text-muted" style="font-size:0.75rem;">可使用中文、英文和数字</div>
+                </div>
+                <div class="mb-3">
+                    <label>密码</label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="background:rgba(0,220,255,0.07);border:1px solid var(--border);border-right:none;color:var(--text-muted);">
+                            <i class="bi bi-lock"></i>
+                        </span>
+                        <input type="password" name="password" class="form-control" placeholder="仅限英文和数字" required style="border-left:none;">
+                    </div>
+                    <div class="form-text text-muted" style="font-size:0.75rem;">仅限英文和数字</div>
+                </div>
+                <div class="mb-4">
+                    <label>邀请码</label>
+                    <div class="input-group">
+                        <span class="input-group-text" style="background:rgba(0,220,255,0.07);border:1px solid var(--border);border-right:none;color:var(--text-muted);">
+                            <i class="bi bi-key"></i>
+                        </span>
+                        <input type="text" name="invite_code" class="form-control" placeholder="输入邀请码" required style="border-left:none;">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 py-2">
+                    <i class="bi bi-person-plus me-2"></i>注册账号
+                </button>
+                <hr>
+                <div class="text-center">
+                    <a href="{{ url_for('login') }}" class="text-muted" style="font-size:0.85rem;">
+                        已有账号？<span style="color:var(--cyan);">返回登录</span>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

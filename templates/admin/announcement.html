@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-megaphone me-2"></i>公告管理</h2>
+        <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">ANNOUNCEMENTS</p>
+    </div>
+</div>
+
+<!-- 发布新公告 -->
+<div class="settings-card mb-4">
+    <div class="settings-card__header">
+        <i class="bi bi-plus-circle me-2"></i>发布新公告
+    </div>
+    <div class="settings-card__body">
+        <form method="post">
+            <div class="mb-3">
+                <label class="field-label">公告标题 *</label>
+                <input type="text" name="title" class="form-control form-control-sm" required placeholder="例：赛程更新通知">
+            </div>
+            <div class="mb-3">
+                <label class="field-label">公告正文 *</label>
+                <textarea name="content" class="form-control" rows="4" required
+                          style="background:rgba(13,20,33,0.8);border-color:var(--border);color:var(--text-main);resize:vertical;"></textarea>
+            </div>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <label class="d-flex align-items-center gap-2" style="cursor:pointer;font-size:0.88rem;">
+                    <input type="checkbox" class="form-check-input mt-0" name="is_active" checked
+                           style="border-color:var(--cyan);background:transparent;">
+                    <span>立即激活</span>
+                </label>
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-send me-1"></i>发布
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 历史公告 -->
+<div class="settings-card">
+    <div class="settings-card__header">
+        <i class="bi bi-clock-history me-2"></i>历史公告
+        <span class="ms-auto" style="font-size:0.78rem;color:var(--text-muted);font-weight:400;letter-spacing:0;">
+            共 {{ announcements|length }} 条
+        </span>
+    </div>
+    <div class="settings-card__body p-0">
+        {% if announcements %}
+        <table class="table table-hover align-middle mb-0" style="font-size:0.88rem;">
+            <thead>
+                <tr>
+                    <th class="ps-3">标题</th>
+                    <th>正文预览</th>
+                    <th style="width:90px;">状态</th>
+                    <th style="width:140px;">发布时间</th>
+                    <th style="width:110px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for ann in announcements %}
+            <tr>
+                <td class="ps-3" style="color:var(--text-main);font-weight:500;">{{ ann.title }}</td>
+                <td style="color:var(--text-muted);font-size:0.82rem;">
+                    {{ ann.content[:50] }}{% if ann.content|length > 50 %}<span class="text-muted">…</span>{% endif %}
+                </td>
+                <td>
+                    {% if ann.is_active %}
+                    <span class="status-badge active"><i class="bi bi-check-circle me-1"></i>激活</span>
+                    {% else %}
+                    <span class="status-badge inactive"><i class="bi bi-pause-circle me-1"></i>未激活</span>
+                    {% endif %}
+                </td>
+                <td style="color:var(--text-muted);font-size:0.78rem;font-family:'Space Mono',monospace;">
+                    {{ ann.created_at.strftime('%Y-%m-%d %H:%M') }}
+                </td>
+                <td>
+                    <a href="{{ url_for('admin_edit_announcement', ann_id=ann.id) }}"
+                       class="btn btn-sm btn-outline-warning me-1" style="font-size:0.75rem;">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    <a href="{{ url_for('admin_delete_announcement', ann_id=ann.id) }}"
+                       class="btn btn-sm btn-outline-danger" style="font-size:0.75rem;"
+                       onclick="return confirm('确定删除此公告？')">
+                        <i class="bi bi-trash"></i>
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-megaphone" style="font-size:2rem;color:var(--text-muted);"></i>
+            <p class="text-muted mt-3 mb-0">暂无公告</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.settings-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.settings-card__header {
+    display:flex; align-items:center;
+    padding:10px 16px;
+    background:rgba(0,220,255,0.06);
+    border-bottom:1px solid var(--border);
+    font-family:"Rajdhani",sans-serif; font-weight:700; font-size:0.95rem;
+    letter-spacing:1.5px; color:var(--cyan);
+}
+.settings-card__body { padding:18px 16px; }
+.field-label { display:block; font-size:0.78rem; color:var(--text-muted); margin-bottom:5px; letter-spacing:0.5px; }
+.form-control, .form-select {
+    background:rgba(13,20,33,0.8) !important;
+    border-color:var(--border) !important;
+    color:var(--text-main) !important;
+}
+.form-control:focus, .form-select:focus {
+    border-color:var(--cyan) !important;
+    box-shadow:0 0 0 2px rgba(0,220,255,0.12) !important;
+}
+.status-badge {
+    display:inline-flex; align-items:center;
+    font-size:0.72rem; font-weight:700; font-family:"Rajdhani",sans-serif;
+    padding:2px 9px; border-radius:4px; letter-spacing:0.5px;
+}
+.status-badge.active   { background:rgba(6,214,160,0.15); color:var(--green); border:1px solid rgba(6,214,160,0.3); }
+.status-badge.inactive { background:rgba(107,127,163,0.12); color:var(--text-muted); border:1px solid rgba(107,127,163,0.2); }
+</style>
+{% endblock %}

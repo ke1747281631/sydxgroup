@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex align-items-center gap-3 mb-4">
+    <div>
+        <h2 class="mb-0">欢迎回来，{{ current_user.username }}</h2>
+        <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">MAIMAI TOURNAMENT SYSTEM</p>
+    </div>
+</div>
+
+{% if announcements %}
+<div class="ann-ticker mb-4" id="ann-ticker">
+    <div class="ann-ticker__icon"><i class="bi bi-megaphone-fill"></i></div>
+    <div class="ann-ticker__track">
+        <div class="ann-ticker__inner" id="ann-inner">
+            {% for ann in announcements %}
+            <div class="ann-item" data-id="{{ ann.id }}" onclick="showAnn({{ ann.id }})">
+                {{ ann.title }}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% for ann in announcements %}
+<div class="ann-modal" id="ann-modal-{{ ann.id }}" style="display:none">
+    <div class="ann-modal__box">
+        <div class="ann-modal__header">
+            <span><i class="bi bi-megaphone me-2"></i>{{ ann.title }}</span>
+            <button onclick="closeAnn({{ ann.id }})" aria-label="关闭"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="ann-modal__body">{{ ann.content | nl2br }}</div>
+        <div class="ann-modal__footer">
+            <span style="font-size:0.72rem;color:var(--text-muted);font-family:'Space Mono',monospace;">
+                {{ ann.created_at.strftime('%Y-%m-%d %H:%M') }}
+            </span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="closeAnn({{ ann.id }})">关闭</button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<h3 class="mb-3" style="font-size:1rem;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);">功能入口</h3>
+<div class="row g-3 mb-4">
+    {% set features = [
+        ('vote',        '/vote',        'bi-hand-index-thumb', '投票',  '参与当前进行中的投票活动', 'cyan'),
+        ('select_song', '/select_song', 'bi-music-note-list',  '选曲',  '从曲库中选择你的参赛曲目', 'pink'),
+        ('ban_song',    '/ban_song',    'bi-slash-circle',     'Ban曲', '封禁对手选择的歌曲',        'gold'),
+        ('score',       '/score',       'bi-bar-chart-line',   '记分',  '查看并更新赛事计分板',      'green'),
+        ('prize_pool',  '/prize_pool',  'bi-gift',             '奖池',  '管理赛事奖品信息',          'cyan'),
+        ('lottery',     '/lottery',     'bi-stars',            '抽奖',  '开始精彩的抽奖环节',        'pink'),
+        ('assignment',  '/assignments', 'bi-journal-check',    '课题',  '提交课题成绩与截图',        'gold'),
+    ] %}
+    {% for feat_key, href, icon, label, desc, color in features %}
+    {% if current_user.is_admin or feature_enabled.get(feat_key, True) %}
+    <div class="col-6 col-md-4 col-lg-2">
+        <a href="{{ href }}" class="text-decoration-none">
+            <div class="card text-center py-4 px-2 h-100" style="border-color:rgba(0,220,255,0.12);">
+                <i class="bi {{ icon }}" style="font-size:1.8rem;color:var(--{{ color }});text-shadow:0 0 12px rgba(0,220,255,0.4);margin-bottom:0.6rem;"></i>
+                <div style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1.05rem;color:var(--text-main);">{{ label }}</div>
+                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;line-height:1.3;">{{ desc }}</div>
+            </div>
+        </a>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<div class="mb-5">
+    <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm" onclick="return confirm('确定要登出吗？')">
+        <i class="bi bi-box-arrow-right me-1"></i>登出
+    </a>
+</div>
+
+{% if current_user.is_admin %}
+<hr>
+<h3 class="mb-3" style="font-size:1rem;letter-spacing:2px;text-transform:uppercase;">
+    <i class="bi bi-shield-lock me-2" style="color:var(--gold);"></i>管理员面板
+</h3>
+<div class="row g-3">
+    {% set admin_links = [
+        ('admin_vote',         'bi-check2-square', '管理投票', '创建 / 编辑投票选项'),
+        ('admin_announcement', 'bi-megaphone',     '管理公告', '发布 / 管理系统公告'),
+        ('admin_assignments',  'bi-journal-bookmark', '管理课题', '创建课题 / 审核成绩'),
+        ('admin_users',        'bi-people',        '用户名单', '查看注册用户列表'),
+        ('admin_settings',     'bi-gear',          '系统设置', '邀请码 / 全局配置'),
+    ] %}
+    {% for endpoint, icon, label, desc in admin_links %}
+    <div class="col-md-4">
+        <a href="{{ url_for(endpoint) }}" class="text-decoration-none">
+            <div class="card px-3 py-3 d-flex flex-row align-items-center gap-3">
+                <i class="bi {{ icon }}" style="font-size:1.5rem;color:var(--gold);"></i>
+                <div>
+                    <div style="font-family:'Rajdhani',sans-serif;font-weight:700;">{{ label }}</div>
+                    <div style="font-size:0.75rem;color:var(--text-muted);">{{ desc }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

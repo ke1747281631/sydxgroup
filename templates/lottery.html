@@ -1,0 +1,702 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
+    <h2 class="mb-0"><i class="bi bi-stars me-2"></i>抽奖</h2>
+    <button class="btn btn-danger btn-sm" onclick="document.getElementById('modal-reset-lottery').style.display='flex'">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>重置全部获奖记录
+    </button>
+</div>
+<p class="text-muted mb-4" style="font-size:0.85rem;letter-spacing:1px;">LOTTERY — 开始精彩抽奖环节</p>
+
+<!-- 重置确认弹窗 -->
+<div id="modal-reset-lottery" class="reset-modal" style="display:none">
+    <div class="reset-modal__box">
+        <div class="reset-modal__header">
+            <span><i class="bi bi-exclamation-triangle me-2"></i>重置抽奖获奖记录</span>
+            <button onclick="document.getElementById('modal-reset-lottery').style.display='none'">&times;</button>
+        </div>
+        <div class="p-4">
+            <div class="reset-warn-box mb-4">
+                <i class="bi bi-exclamation-circle me-2" style="color:var(--pink);"></i>
+                此操作将清空<strong>所有奖项的获奖者记录</strong>，奖品信息本身（名称、数量等）不受影响。
+                <br><span style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;display:block;">操作不可撤销，请确认后继续。</span>
+            </div>
+            <form method="post" action="{{ url_for('admin_reset_lottery') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary"
+                            onclick="document.getElementById('modal-reset-lottery').style.display='none'">取消</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-4">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>确认重置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if prizes %}
+<div class="row g-3 mb-5">
+    {% for prize in prizes %}
+    <div class="col-md-6 col-lg-4" data-prize-id="{{ prize.id }}">
+        <div class="prize-card card h-100 p-3" style="{% if prize.winner %}border-color:var(--gold);{% endif %}position:relative;overflow:hidden;">
+            {% if prize.winner %}
+            <div style="position:absolute;top:0;right:0;width:0;height:0;
+                        border-style:solid;border-width:0 48px 48px 0;
+                        border-color:transparent var(--gold) transparent transparent;"></div>
+            <i class="bi bi-trophy-fill" style="position:absolute;top:6px;right:6px;font-size:0.85rem;color:#070b12;"></i>
+            {% endif %}
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <i class="bi bi-gift me-1" style="color:var(--gold);"></i>
+                    <span style="font-weight:700;color:var(--text-main);">{{ prize.prize }}</span>
+                </div>
+                <span style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--cyan);">×{{ prize.quantity }}</span>
+            </div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">
+                <i class="bi bi-person me-1"></i>提供者：{{ prize.provider }}
+            </div>
+            {% if prize.condition %}
+            <div style="font-size:0.78rem;margin-bottom:8px;">
+                <span style="background:rgba(0,220,255,0.1);border:1px solid var(--border);
+                             padding:2px 8px;border-radius:4px;color:var(--cyan);font-size:0.72rem;">
+                    {{ prize.condition }}
+                </span>
+            </div>
+            {% endif %}
+            <div class="mt-auto pt-2 prize-action" style="border-top:1px solid var(--border);"
+                 data-prize-id="{{ prize.id }}" data-prize-name="{{ prize.prize }}" data-prize-qty="{{ prize.quantity }}">
+                {% if prize.winner %}
+                <div class="winner-display" style="color:var(--gold);font-weight:600;font-size:0.88rem;">
+                    <i class="bi bi-trophy me-1"></i>获奖者：{{ prize.winner }}
+                </div>
+                <button class="btn btn-outline-secondary btn-sm w-100 mt-2"
+                        onclick="resetWinner({{ prize.id }})">重新抽奖</button>
+                {% else %}
+                <div class="winner-display" style="color:var(--text-muted);font-size:0.8rem;margin-bottom:8px;">尚未抽奖</div>
+                <button class="btn btn-primary btn-sm w-100"
+                        onclick="openDraw({{ prize.id }}, '{{ prize.prize }}', {{ prize.quantity }})">
+                    <i class="bi bi-stars me-1"></i>开始抽奖
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card text-center py-5 mb-5">
+    <i class="bi bi-gift" style="font-size:2.5rem;color:var(--text-muted);"></i>
+    <p class="text-muted mt-3 mb-0">奖池为空，请先在<a href="{{ url_for('prize_pool') }}" style="color:var(--cyan);">奖池管理</a>添加奖品。</p>
+</div>
+{% endif %}
+
+<!-- ══ 选手池 ══ -->
+<div class="card p-3 mb-4">
+<!-- ══ 抽奖参与者名单 ══ -->
+<div class="card p-3 mb-4">
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <i class="bi bi-person-lines-fill" style="color:var(--gold);font-size:1.1rem;"></i>
+        <h3 class="mb-0" style="font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);">
+            抽奖参与者名单
+        </h3>
+        <span class="badge ms-auto"
+              style="background:rgba(255,209,102,0.15);color:var(--gold);font-family:'Space Mono',monospace;">
+            共 {{ participants | length }} 人
+        </span>
+        <button class="btn btn-sm btn-danger" style="font-size:0.75rem;padding:2px 10px;"
+                onclick="document.getElementById('modal-clear-participants').style.display='flex'">
+            <i class="bi bi-trash me-1"></i>清空
+        </button>
+    </div>
+
+    <!-- 已有参与者 -->
+    <div class="d-flex flex-wrap gap-2 mb-3" id="participant-tags">
+        {% for p in participants %}
+        <span class="participant-tag">
+            <i class="bi bi-person-fill me-1" style="color:var(--gold);font-size:0.75rem;"></i>
+            {{ p.name }}
+            {% if p.remark %}<span style="font-size:0.65rem;color:var(--text-muted);">·{{ p.remark }}</span>{% endif %}
+            <form method="post" action="{{ url_for('lottery_participant_delete', pid=p.id) }}" class="d-inline">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="ptag-del" title="移除">×</button>
+            </form>
+        </span>
+        {% endfor %}
+        {% if not participants %}
+        <p class="text-muted mb-0" style="font-size:0.85rem;">名单为空，请在下方添加参与者。</p>
+        {% endif %}
+    </div>
+
+    <!-- 添加表单 -->
+    <div class="row g-2">
+        <!-- 单个添加 -->
+        <div class="col-12 col-md-6">
+            <form method="post" action="{{ url_for('lottery_participant_add') }}" class="d-flex gap-2">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <input type="text" name="name" class="form-control form-control-sm"
+                       placeholder="参与者姓名" required maxlength="100">
+                <input type="text" name="remark" class="form-control form-control-sm"
+                       placeholder="备注（可选）" maxlength="200" style="max-width:100px;">
+                <button type="submit" class="btn btn-sm btn-outline-gold" style="white-space:nowrap;">
+                    <i class="bi bi-plus me-1"></i>添加
+                </button>
+            </form>
+        </div>
+        <!-- 批量添加 -->
+        <div class="col-12 col-md-6">
+            <details>
+                <summary style="font-size:0.78rem;color:var(--text-muted);cursor:pointer;margin-bottom:6px;">
+                    批量添加（每行一个名字）
+                </summary>
+                <form method="post" action="{{ url_for('lottery_participant_add_batch') }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <textarea name="names" class="form-control form-control-sm mb-2"
+                              rows="4" placeholder="张三&#10;李四&#10;王五" required></textarea>
+                    <button type="submit" class="btn btn-sm btn-outline-gold">
+                        <i class="bi bi-upload me-1"></i>批量添加
+                    </button>
+                </form>
+            </details>
+        </div>
+    </div>
+</div>
+
+<!-- 清空确认弹窗 -->
+<div id="modal-clear-participants" class="reset-modal" style="display:none">
+    <div class="reset-modal__box">
+        <div class="reset-modal__header" style="background:rgba(255,45,120,0.08);color:var(--pink);">
+            <span><i class="bi bi-exclamation-triangle me-2"></i>清空参与者名单</span>
+            <button onclick="document.getElementById('modal-clear-participants').style.display='none'">&times;</button>
+        </div>
+        <div class="p-4">
+            <div class="reset-warn-box mb-4">
+                此操作将清空<strong>全部抽奖参与者</strong>，操作不可撤销。
+            </div>
+            <form method="post" action="{{ url_for('lottery_participant_clear') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary"
+                            onclick="document.getElementById('modal-clear-participants').style.display='none'">取消</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-4">确认清空</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <i class="bi bi-people" style="color:var(--cyan);font-size:1.1rem;"></i>
+        <h3 class="mb-0" style="font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);">
+            计分选手池
+        </h3>
+        <span class="badge"
+              style="background:rgba(0,220,255,0.15);color:var(--cyan);font-family:'Space Mono',monospace;">
+            候选：<span id="filtered-count">{{ players | length }}</span> / <span id="pool-total">{{ players | length }}</span>
+        </span>
+        <div class="d-flex gap-1 ms-auto">
+            <button class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;border:1px solid var(--border);color:var(--text-muted);"
+                    onclick="selectAllPlayers(true)">全选</button>
+            <button class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;border:1px solid var(--border);color:var(--text-muted);"
+                    onclick="selectAllPlayers(false)">全不选</button>
+        </div>
+    </div>
+
+    {% if matches_info %}
+    <div class="mb-3 p-3" style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px;letter-spacing:1px;">
+            <i class="bi bi-funnel me-1"></i>按场次晋级状态筛选（可多选）
+        </div>
+        <div class="d-flex flex-wrap gap-2" id="filter-chips">
+            <button class="filter-chip active" data-filter="all" onclick="toggleFilter('all', this)">
+                全部
+            </button>
+            {% for match in matches_info %}
+            <button class="filter-chip" data-filter="advance-{{ match.id }}" onclick="toggleFilter('advance-{{ match.id }}', this)">
+                {{ match.name }} · 晋级
+            </button>
+            <button class="filter-chip" data-filter="wait-{{ match.id }}" onclick="toggleFilter('wait-{{ match.id }}', this)">
+                {{ match.name }} · 候补
+            </button>
+            <button class="filter-chip" data-filter="out-{{ match.id }}" onclick="toggleFilter('out-{{ match.id }}', this)">
+                {{ match.name }} · 淘汰
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px;">
+        <i class="bi bi-hand-index me-1"></i>点击选手标签可将其排除/重新加入抽奖池
+    </div>
+    <div id="player-tags" class="d-flex flex-wrap gap-2">
+        {% for player in players %}
+        <span class="player-tag" data-name="{{ player.name }}" data-matches='{{ player.matches | tojson }}'
+              onclick="togglePlayerExclude(this)" title="点击排除/恢复">
+            <i class="bi bi-person me-1" style="color:var(--text-muted);font-size:0.8rem;"></i>{{ player.name }}
+            {% for m in player.matches %}
+                {% if m.result == '晋级' %}<span class="mini-badge advance">晋</span>
+                {% elif m.result == '候补' %}<span class="mini-badge wait">补</span>
+                {% elif m.result == '淘汰' %}<span class="mini-badge out">淘</span>
+                {% endif %}
+            {% endfor %}
+        </span>
+        {% endfor %}
+        {% if not players %}
+        <p class="text-muted mb-0" style="font-size:0.85rem;">计分界面暂无选手数据。</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ══ 抽奖浮层 ══ -->
+<div id="draw-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);
+     z-index:1050;align-items:center;justify-content:center;">
+    <div class="card p-4" style="min-width:340px;max-width:480px;width:90%;position:relative;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0" id="draw-title"><i class="bi bi-stars me-2" style="color:var(--gold);"></i>抽奖</h5>
+            <button onclick="closeDraw()" style="background:none;border:none;color:var(--text-muted);font-size:1.4rem;line-height:1;">&times;</button>
+        </div>
+        <!-- 抽奖来源切换 -->
+        <div class="d-flex gap-2 mb-3">
+            <button class="draw-src-btn active" data-src="score" onclick="setDrawSource('score')"
+                    style="flex:1;">
+                <i class="bi bi-bar-chart-line me-1"></i>计分选手池
+            </button>
+            <button class="draw-src-btn" data-src="list" onclick="setDrawSource('list')"
+                    style="flex:1;">
+                <i class="bi bi-person-lines-fill me-1"></i>参与者名单
+            </button>
+        </div>
+        <div id="draw-candidates-info" class="mb-3"
+             style="font-size:0.82rem;color:var(--text-muted);padding:6px 10px;
+                    background:rgba(0,220,255,0.05);border-radius:6px;border:1px solid var(--border);"></div>
+        <!-- 滚动动画 -->
+        <div id="drum-roll" style="display:none;text-align:center;padding:24px 0;
+             font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1.5rem;
+             color:var(--cyan);letter-spacing:3px;min-height:72px;"></div>
+        <!-- 结果 -->
+        <div id="draw-result" style="display:none;text-align:center;padding:16px;
+             background:rgba(255,209,102,0.1);border:1px solid var(--gold);
+             border-radius:8px;margin-bottom:16px;">
+            <div style="color:var(--gold);font-size:0.78rem;margin-bottom:8px;letter-spacing:1px;">🏆 获奖者</div>
+            <div id="draw-winners" style="font-size:1.1rem;font-weight:700;color:var(--text-main);line-height:1.6;"></div>
+        </div>
+        <form id="draw-form" method="post">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary w-100" id="draw-btn" onclick="startDrum()">
+                    <i class="bi bi-shuffle me-1"></i>开始抽取
+                </button>
+                <button type="submit" class="btn btn-success w-100" id="confirm-btn" style="display:none">
+                    <i class="bi bi-check2 me-1"></i>确认并保存
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.filter-chip {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all .15s;
+}
+.filter-chip:hover { border-color:var(--cyan); color:var(--cyan); }
+.filter-chip.active { background:rgba(0,220,255,0.15); border-color:var(--cyan); color:var(--cyan); }
+.filter-chip[data-filter^="wait"].active { background:rgba(255,209,102,0.15); border-color:var(--gold); color:var(--gold); }
+.filter-chip[data-filter^="out"].active  { background:rgba(255,45,120,0.15); border-color:var(--pink); color:var(--pink); }
+.filter-chip[data-filter^="advance"].active { background:rgba(6,214,160,0.15); border-color:var(--green); color:var(--green); }
+
+.player-tag {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    color: var(--text-main);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.player-tag.hidden { display: none !important; }
+.player-tag.excluded {
+    opacity: 0.3;
+    text-decoration: line-through;
+    cursor: pointer;
+    border-color: rgba(255,45,120,0.3) !important;
+}
+.player-tag { cursor: pointer; user-select: none; }
+
+.mini-badge {
+    font-size: 0.6rem; padding: 1px 4px; border-radius: 3px;
+    font-weight: 700; font-family: 'Rajdhani', sans-serif;
+}
+.mini-badge.advance { background:rgba(6,214,160,0.2); color:var(--green); border:1px solid rgba(6,214,160,0.4); }
+.mini-badge.wait    { background:rgba(255,209,102,0.2); color:var(--gold); border:1px solid rgba(255,209,102,0.4); }
+.mini-badge.out     { background:rgba(255,45,120,0.2); color:var(--pink); border:1px solid rgba(255,45,120,0.4); }
+/* 参与者名单 */
+.participant-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px 3px 10px;
+    border-radius: 999px;
+    background: rgba(255,209,102,0.1);
+    border: 1px solid rgba(255,209,102,0.3);
+    font-size: 0.8rem;
+    color: var(--text-main);
+}
+.ptag-del {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: color .15s;
+}
+.ptag-del:hover { color: var(--pink); }
+.draw-src-btn {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all .15s;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.draw-src-btn.active {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: rgba(255,209,102,0.1);
+}
+.btn-outline-gold {
+    border: 1px solid rgba(255,209,102,0.5);
+    color: var(--gold);
+    background: transparent;
+    font-size: 0.8rem;
+    transition: all .15s;
+}
+.btn-outline-gold:hover { background: rgba(255,209,102,0.1); border-color: var(--gold); color: var(--gold); }
+.form-control, .form-select {
+    background: rgba(13,20,33,.9) !important;
+    border-color: var(--border) !important;
+    color: var(--text-main) !important;
+}
+.form-control:focus {
+    border-color: var(--cyan) !important;
+    box-shadow: 0 0 0 2px rgba(0,220,255,.12) !important;
+}
+
+.reset-modal { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1050; display:flex; align-items:center; justify-content:center; }
+.reset-modal__box { background:var(--bg-card); border:1px solid rgba(255,45,120,0.3); border-radius:10px; width:90%; max-width:420px; overflow:hidden; }
+.reset-modal__header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:rgba(255,45,120,0.08); border-bottom:1px solid rgba(255,45,120,0.2); font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.95rem; color:var(--pink); letter-spacing:1px; }
+.reset-modal__header button { background:none; border:none; color:var(--text-muted); font-size:1.3rem; line-height:1; cursor:pointer; }
+.reset-warn-box { background:rgba(255,45,120,0.07); border:1px solid rgba(255,45,120,0.25); border-radius:8px; padding:14px 16px; font-size:0.88rem; color:var(--text-main); line-height:1.6; }
+</style>
+
+<script>
+const ALL_PLAYERS    = {{ players | tojson }};
+const ALL_PARTICIPANTS = {{ participants | map(attribute='name') | list | tojson }};
+const _excludedPlayers = new Set();  // 手动排除的选手名
+
+// 持久化排除状态到 sessionStorage（刷新内保留）
+function _saveExcluded() {
+    sessionStorage.setItem('lottery_excluded', JSON.stringify([..._excludedPlayers]));
+}
+function _loadExcluded() {
+    try {
+        const saved = sessionStorage.getItem('lottery_excluded');
+        if (saved) JSON.parse(saved).forEach(n => _excludedPlayers.add(n));
+    } catch(_) {}
+}
+
+function togglePlayerExclude(tag) {
+    const name = tag.dataset.name;
+    if (_excludedPlayers.has(name)) {
+        _excludedPlayers.delete(name);
+        tag.classList.remove('excluded');
+    } else {
+        _excludedPlayers.add(name);
+        tag.classList.add('excluded');
+    }
+    _saveExcluded();
+    applyPlayerFilter();
+}
+
+function selectAllPlayers(include) {
+    _excludedPlayers.clear();
+    // 只操作当前「未被场次筛选隐藏」的标签
+    document.querySelectorAll('.player-tag:not(.hidden)').forEach(tag => {
+        if (!include) {
+            _excludedPlayers.add(tag.dataset.name);
+            tag.classList.add('excluded');
+        } else {
+            tag.classList.remove('excluded');
+        }
+    });
+    _saveExcluded();
+    applyPlayerFilter();
+}
+
+function applyPlayerFilter() {
+    // 场次筛选：控制 hidden（哪些在当前分类里）
+    // 排除标记：控制 excluded（手动排除，叠加在场次筛选之上）
+    // 候选池 = 当前分类内 且 未手动排除
+    const inFilter = new Set(getFiltered());
+    filteredPlayers = _drawSource === 'list'
+        ? [...ALL_PARTICIPANTS]
+        : [...inFilter].filter(name => !_excludedPlayers.has(name));
+
+    // 更新计数
+    const totalInFilter = inFilter.size;
+    const activeCount   = filteredPlayers.length;
+    const fcEl = document.getElementById('filtered-count');
+    const ptEl = document.getElementById('pool-total');
+    if (fcEl) fcEl.textContent = activeCount;
+    if (ptEl) ptEl.textContent = totalInFilter;
+}
+let activeFilters = new Set(['all']);  // 支持多选
+let filteredPlayers = [];
+
+function getFiltered() {
+    if (activeFilters.has('all')) return ALL_PLAYERS.map(p => p.name);
+    const resultMap = { advance: '晋级', wait: '候补', out: '淘汰' };
+    return ALL_PLAYERS.filter(player => {
+        return [...activeFilters].some(filter => {
+            const parts = filter.split('-');
+            const status = parts[0];
+            const mid = parseInt(parts[1]);
+            const targetResult = resultMap[status];
+            return player.matches.some(m => m.match_id === mid && m.result === targetResult);
+        });
+    }).map(p => p.name);
+}
+
+function toggleFilter(filter, btn) {
+    if (filter === 'all') {
+        activeFilters = new Set(['all']);
+        document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+    } else {
+        activeFilters.delete('all');
+        document.querySelector('[data-filter="all"]').classList.remove('active');
+        if (activeFilters.has(filter)) {
+            activeFilters.delete(filter);
+            btn.classList.remove('active');
+            if (activeFilters.size === 0) {
+                activeFilters.add('all');
+                document.querySelector('[data-filter="all"]').classList.add('active');
+            }
+        } else {
+            activeFilters.add(filter);
+            btn.classList.add('active');
+        }
+    }
+    updatePlayerTags();
+}
+
+function updatePlayerTags() {
+    const inFilter = new Set(getFiltered());
+    // hidden = 不在当前场次筛选范围内（与排除状态无关）
+    document.querySelectorAll('.player-tag').forEach(tag => {
+        const name = tag.dataset.name;
+        tag.classList.toggle('hidden', !inFilter.has(name));
+        // 恢复排除状态（切换分类后重新应用）
+        tag.classList.toggle('excluded', _excludedPlayers.has(name));
+    });
+    applyPlayerFilter();
+}
+
+// 初始化：加载持久化的排除状态
+_loadExcluded();
+filteredPlayers = ALL_PLAYERS.filter(p => !_excludedPlayers.has(p.name)).map(p => p.name);
+// 恢复标签的 excluded 样式
+document.querySelectorAll('.player-tag').forEach(tag => {
+    if (_excludedPlayers.has(tag.dataset.name)) tag.classList.add('excluded');
+});
+document.getElementById('pool-total') && (document.getElementById('pool-total').textContent = ALL_PLAYERS.length);
+const fcInit = document.getElementById('filtered-count');
+if (fcInit) fcInit.textContent = filteredPlayers.length;
+
+// ── 抽奖 ──
+let currentPrizeId = null;
+let currentQty = 1;
+let drumTimer = null;
+
+function openDraw(prizeId, prizeName, qty) {
+    currentPrizeId = prizeId;
+    currentQty = qty;
+    filteredPlayers = getFiltered();
+    document.getElementById('draw-title').innerHTML =
+        `<i class="bi bi-stars me-2" style="color:var(--gold);"></i>${prizeName} ×${qty}`;
+    document.getElementById('draw-form').action = `/lottery/draw/${prizeId}`;
+    document.getElementById('draw-result').style.display = 'none';
+    document.getElementById('drum-roll').style.display = 'none';
+    document.getElementById('draw-btn').style.display = '';
+    document.getElementById('draw-btn').disabled = false;
+    document.getElementById('confirm-btn').style.display = 'none';
+    refreshDrawPool();
+    document.getElementById('draw-overlay').style.display = 'flex';
+}
+
+let _drawSource = 'score'; // 'score' | 'list'
+
+function setDrawSource(src) {
+    _drawSource = src;
+    document.querySelectorAll('.draw-src-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.src === src);
+    });
+    refreshDrawPool();
+}
+
+function refreshDrawPool() {
+    if (_drawSource === 'list') {
+        filteredPlayers = [...ALL_PARTICIPANTS];
+    } else {
+        filteredPlayers = getFiltered().filter(name => !_excludedPlayers.has(name));
+    }
+    document.getElementById('draw-candidates-info').textContent =
+        `候选人 ${filteredPlayers.length} 名，抽取 ${Math.min(currentQty, filteredPlayers.length)} 名`;
+}
+
+function closeDraw() {
+    if (drumTimer) { clearInterval(drumTimer); drumTimer = null; }
+    document.getElementById('draw-overlay').style.display = 'none';
+}
+
+function startDrum() {
+    if (filteredPlayers.length === 0) { alert('没有候选人，请调整筛选条件'); return; }
+    document.getElementById('draw-btn').disabled = true;
+    document.getElementById('drum-roll').style.display = 'block';
+    document.getElementById('draw-result').style.display = 'none';
+
+    const pool = [...filteredPlayers];
+    drumTimer = setInterval(() => {
+        document.getElementById('drum-roll').textContent =
+            pool[Math.floor(Math.random() * pool.length)];
+    }, 80);
+
+    setTimeout(() => {
+        clearInterval(drumTimer); drumTimer = null;
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        const winners = shuffled.slice(0, Math.min(currentQty, shuffled.length));
+        document.getElementById('drum-roll').style.display = 'none';
+        document.getElementById('draw-winners').textContent = winners.join('、');
+        document.getElementById('draw-result').style.display = 'block';
+        // 只注入中奖者到 form（后端直接存储，不再二次抽取）
+        const form = document.getElementById('draw-form');
+        form.querySelectorAll('input[name="winners"]').forEach(el => el.remove());
+        winners.forEach(name => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden'; inp.name = 'winners'; inp.value = name;
+            form.appendChild(inp);
+        });
+        document.getElementById('draw-btn').style.display = 'none';
+        document.getElementById('confirm-btn').style.display = '';
+    }, 1800);
+}
+
+function resetWinner(prizeId) {
+    if (!confirm('确定清除此奖项的获奖记录？')) return;
+    fetch(`/lottery/reset/${prizeId}`, {method:'POST'})
+        .then(() => location.reload());
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        ['modal-reset-lottery','modal-clear-participants'].forEach(id => {
+            const m = document.getElementById(id);
+            if (m) m.style.display = 'none';
+        });
+    }
+});
+
+// ── SSE：抽奖页实时更新 ──
+(function startLotterySSE() {
+    const es = new EventSource('/api/sse/lottery');
+
+    es.onmessage = function(e) {
+        const d = JSON.parse(e.data);
+
+        // 获奖者更新
+        if (d.type === 'winner_update') {
+            const col = document.querySelector(`[data-prize-id="${d.prize_id}"].col-md-6, div[data-prize-id="${d.prize_id}"]`);
+            const action = document.querySelector(`.prize-action[data-prize-id="${d.prize_id}"]`);
+            if (!action) return;
+            const name  = action.dataset.prizeName;
+            const qty   = action.dataset.prizeQty;
+            const card  = action.closest('.prize-card');
+
+            if (d.winner) {
+                // 有获奖者
+                if (card) card.style.borderColor = 'var(--gold)';
+                action.innerHTML = `
+                    <div class="winner-display" style="color:var(--gold);font-weight:600;font-size:0.88rem;">
+                        <i class="bi bi-trophy me-1"></i>获奖者：${d.winner}
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm w-100 mt-2"
+                            onclick="resetWinner(${d.prize_id})">重新抽奖</button>`;
+            } else {
+                // 已重置
+                if (card) card.style.borderColor = '';
+                action.innerHTML = `
+                    <div class="winner-display" style="color:var(--text-muted);font-size:0.8rem;margin-bottom:8px;">尚未抽奖</div>
+                    <button class="btn btn-primary btn-sm w-100"
+                            onclick="openDraw(${d.prize_id}, '${name}', ${qty})">
+                        <i class="bi bi-stars me-1"></i>开始抽奖
+                    </button>`;
+            }
+        }
+
+        // 参与者名单更新
+        if (d.type === 'participants_update') {
+            const container = document.getElementById('participant-tags');
+            if (!container) return;
+
+            // 更新 ALL_PARTICIPANTS 内存数据
+            ALL_PARTICIPANTS.length = 0;
+            d.participants.forEach(p => ALL_PARTICIPANTS.push(p.name));
+
+            // 重新渲染参与者标签
+            if (!d.participants.length) {
+                container.innerHTML = '<p class="text-muted mb-0" style="font-size:0.85rem;">名单为空，请在下方添加参与者。</p>';
+            } else {
+                container.innerHTML = d.participants.map(p => `
+                    <span class="participant-tag">
+                        <i class="bi bi-person-fill me-1" style="color:var(--gold);font-size:0.75rem;"></i>
+                        ${p.name}
+                        ${p.remark ? `<span style="font-size:0.65rem;color:var(--text-muted);">·${p.remark}</span>` : ''}
+                        <form method="post" action="/lottery/participant/delete/${p.id}" class="d-inline">
+                            <input type="hidden" name="_csrf_token" value="${_csrfToken}">
+                            <button type="submit" class="ptag-del" title="移除">×</button>
+                        </form>
+                    </span>`).join('');
+            }
+
+            // 更新总数显示
+            const countEl = container.closest('.card')?.querySelector('.badge');
+            if (countEl) countEl.textContent = `共 ${d.participants.length} 人`;
+
+            // 刷新抽奖池
+            refreshDrawPool();
+        }
+    };
+
+    es.onerror = function() { es.close(); setTimeout(startLotterySSE, 3000); };
+})();
+
+// CSRF token（从 base.html 注入）
+const _csrfToken = (typeof _csrfToken !== 'undefined') ? _csrfToken : '';
+</script>
+{% endblock %}

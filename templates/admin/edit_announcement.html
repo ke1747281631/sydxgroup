@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-pencil-square me-2"></i>编辑公告</h2>
+    <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">EDIT ANNOUNCEMENT</p>
+</div>
+
+<div class="settings-card">
+    <div class="settings-card__header">
+        <i class="bi bi-megaphone me-2"></i>公告内容
+    </div>
+    <div class="settings-card__body">
+        <form method="post">
+            <div class="mb-4">
+                <label class="field-label">公告标题 *</label>
+                <input type="text" name="title" class="form-control form-control-sm mb-3"
+                       value="{{ announcement.title }}" required>
+                <label class="field-label">公告正文 *</label>
+                <textarea name="content" class="form-control" rows="6" required
+                          style="resize:vertical;">{{ announcement.content }}</textarea>
+            </div>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <label class="d-flex align-items-center gap-2" style="cursor:pointer;font-size:0.88rem;">
+                    <input type="checkbox" class="form-check-input mt-0" name="is_active"
+                           {% if announcement.is_active %}checked{% endif %}
+                           style="border-color:var(--cyan);">
+                    <span>激活此公告</span>
+                </label>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('admin_announcement') }}" class="btn btn-sm btn-outline-secondary px-3">
+                        <i class="bi bi-arrow-left me-1"></i>取消
+                    </a>
+                    <button type="submit" class="btn btn-sm btn-primary px-4">
+                        <i class="bi bi-check2 me-1"></i>保存
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

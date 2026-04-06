@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-hand-thumbs-up me-2"></i>投票管理</h2>
+        <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">VOTE MANAGEMENT</p>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openNewTopic()">
+        <i class="bi bi-plus-circle me-1"></i>新建投票
+    </button>
+</div>
+
+{% if topics %}
+<div class="d-flex flex-column gap-3">
+{% for topic in topics %}
+{% set is_active = topic.start_date <= now_dt <= topic.end_date %}
+<div class="topic-card">
+    <div class="topic-header">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="status-dot {% if is_active %}active{% endif %}"></span>
+            <span class="topic-title">{{ topic.title }}</span>
+            <span class="type-badge {% if topic.vote_type == 'multi' %}multi{% endif %}">
+                {% if topic.vote_type == 'multi' %}多选{% else %}单选{% endif %}
+            </span>
+            {% if topic.description %}
+            <span style="font-size:0.78rem;color:var(--text-muted);">— {{ topic.description }}</span>
+            {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="date-range">
+                <i class="bi bi-calendar3 me-1"></i>
+                {{ topic.start_date.strftime('%m/%d') }} – {{ topic.end_date.strftime('%m/%d') }}
+            </span>
+            <div class="d-flex gap-1">
+                <button class="icon-btn"
+                    onclick="openEditTopic({{ topic.id }}, '{{ topic.title|e }}', '{{ topic.description|e }}', '{{ topic.vote_type }}', '{{ topic.start_date.strftime('%Y-%m-%d') }}', '{{ topic.end_date.strftime('%Y-%m-%d') }}')"
+                    title="编辑主题">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <a href="{{ url_for('admin_delete_vote_topic', topic_id=topic.id) }}"
+                   class="icon-btn danger" title="删除主题"
+                   onclick="return confirm('删除此投票主题及其所有选项？')">
+                    <i class="bi bi-trash"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="topic-body">
+        {% if topic.options %}
+        <div class="options-list">
+            {% for opt in topic.options %}
+            <div class="option-row">
+                <span class="option-name">{{ opt.title }}</span>
+                <span class="vote-count">
+                    <i class="bi bi-hand-thumbs-up me-1" style="font-size:0.7rem;"></i>{{ opt.votes | length }}
+                </span>
+                <a href="{{ url_for('admin_delete_vote_option', option_id=opt.id) }}"
+                   class="option-del" title="删除选项"
+                   onclick="return confirm('删除选项「{{ opt.title }}」？')">
+                    <i class="bi bi-x"></i>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="font-size:0.82rem;color:var(--text-muted);padding:6px 0;">暂无选项，在下方添加</div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('admin_add_vote_option', topic_id=topic.id) }}" class="add-option-form mt-2">
+            <input type="text" name="title" class="form-control form-control-sm" placeholder="输入新选项名称…" required>
+            <button type="submit" class="btn btn-sm btn-outline-cyan">
+                <i class="bi bi-plus me-1"></i>添加选项
+            </button>
+        </form>
+    </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card text-center py-5">
+    <i class="bi bi-hand-thumbs-up" style="font-size:2.5rem;color:var(--text-muted);"></i>
+    <p class="text-muted mt-3 mb-0">暂无投票，点击右上角「新建投票」开始</p>
+</div>
+{% endif %}
+
+<!-- 新建主题 Modal -->
+<div id="modal-new" class="vote-modal" style="display:none">
+    <div class="vote-modal__box">
+        <div class="vote-modal__header">
+            <span><i class="bi bi-plus-circle me-2"></i>新建投票</span>
+            <button onclick="closeModal('modal-new')">&times;</button>
+        </div>
+        <form method="post" action="{{ url_for('admin_add_vote_topic') }}" class="p-3">
+            <div class="mb-3">
+                <label class="field-label">投票标题 *</label>
+                <input type="text" name="title" class="form-control form-control-sm" required placeholder="例：最受欢迎曲目">
+            </div>
+            <div class="mb-3">
+                <label class="field-label">描述（可选）</label>
+                <input type="text" name="description" class="form-control form-control-sm" placeholder="简短说明">
+            </div>
+            <div class="mb-3">
+                <label class="field-label">投票类型 *</label>
+                <div class="d-flex gap-2">
+                    <label class="type-radio"><input type="radio" name="vote_type" value="single" checked><span><i class="bi bi-record-circle me-1"></i>单选</span></label>
+                    <label class="type-radio"><input type="radio" name="vote_type" value="multi"><span><i class="bi bi-check2-square me-1"></i>多选</span></label>
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="field-label">开始日期 *</label>
+                    <input type="date" name="start_date" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-6">
+                    <label class="field-label">结束日期 *</label>
+                    <input type="date" name="end_date" class="form-control form-control-sm" required>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="closeModal('modal-new')">取消</button>
+                <button type="submit" class="btn btn-sm btn-primary px-4">创建</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 编辑主题 Modal -->
+<div id="modal-edit" class="vote-modal" style="display:none">
+    <div class="vote-modal__box">
+        <div class="vote-modal__header">
+            <span><i class="bi bi-pencil me-2"></i>编辑投票</span>
+            <button onclick="closeModal('modal-edit')">&times;</button>
+        </div>
+        <form method="post" id="edit-form" class="p-3">
+            <div class="mb-3">
+                <label class="field-label">投票标题 *</label>
+                <input type="text" name="title" id="edit-title" class="form-control form-control-sm" required>
+            </div>
+            <div class="mb-3">
+                <label class="field-label">描述（可选）</label>
+                <input type="text" name="description" id="edit-desc" class="form-control form-control-sm">
+            </div>
+            <div class="mb-3">
+                <label class="field-label">投票类型 *</label>
+                <div class="d-flex gap-2">
+                    <label class="type-radio"><input type="radio" name="vote_type" id="edit-type-single" value="single"><span><i class="bi bi-record-circle me-1"></i>单选</span></label>
+                    <label class="type-radio"><input type="radio" name="vote_type" id="edit-type-multi" value="multi"><span><i class="bi bi-check2-square me-1"></i>多选</span></label>
+                </div>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="field-label">开始日期 *</label>
+                    <input type="date" name="start_date" id="edit-start" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-6">
+                    <label class="field-label">结束日期 *</label>
+                    <input type="date" name="end_date" id="edit-end" class="form-control form-control-sm" required>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="closeModal('modal-edit')">取消</button>
+                <button type="submit" class="btn btn-sm btn-primary px-4">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

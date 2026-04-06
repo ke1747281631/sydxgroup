@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-slash-circle me-2"></i>Ban 曲</h2>
+        <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">SONG BAN</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        {% if not is_admin %}
+        <div class="card px-3 py-2 text-center" style="border-color:var(--pink);min-width:130px;">
+            <div style="font-family:'Space Mono',monospace;font-size:1.2rem;color:var(--pink);">
+                {{ user_ban_count }} <span style="color:var(--text-muted);font-size:0.9rem;">/ {{ max_ban }}</span>
+            </div>
+            <div style="font-size:0.7rem;color:var(--text-muted);letter-spacing:1px;">已用 / Ban上限</div>
+        </div>
+        {% endif %}
+        <a href="{{ url_for('ban_song_export') }}" class="btn btn-success btn-sm">
+            <i class="bi bi-file-earmark-excel me-1"></i>导出表格
+        </a>
+        {% if is_admin %}
+        <button class="btn btn-danger btn-sm" onclick="document.getElementById('modal-reset-ban').style.display='flex'">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>重置 Ban 曲
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{% if not is_admin and not user_has_selected %}
+<div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle me-2"></i>
+    你还没有选曲，请先前往<a href="{{ url_for('select_song') }}" class="alert-link">选曲</a>后才能进行 Ban 操作。
+</div>
+{% elif not is_admin and user_ban_count >= max_ban %}
+<div class="alert alert-warning mb-4">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    你已用完所有 Ban 次数（{{ max_ban }} 次）。
+</div>
+{% endif %}
+
+{% if songs_info %}
+<div class="mai-grid">
+{% for item in songs_info %}
+{%- set diff_map = {'Basic':'BSC','Advanced':'ADV','Expert':'EXP','Master':'MST','Re:Master':'MST_Re'} -%}
+{%- set dk = diff_map.get(item.song.difficulty, 'MST') -%}
+{%- set is_sd = item.song.song_type == 'SD' -%}
+
+<div class="mai-card-wrap" data-song-id="{{ item.song.id }}">
+
+    <div class="mai-card {% if item.banned %}mai-card--banned{% endif %}">
+        <div class="mai-card__body">
+
+            <img class="mc-frame"
+                 src="/static/mai/pic/UI_TST_MBase_{{ dk }}.png"
+                 alt="" draggable="false">
+
+            <div class="mc-cover">
+                {% if item.song.cover_url %}
+                <img src="{{ item.song.cover_url }}" alt="">
+                {% else %}
+                <span class="mc-cover__ph"><i class="bi bi-music-note-beamed"></i></span>
+                {% endif %}
+            </div>
+
+            <img class="mc-tab {% if is_sd %}mc-tab--sd{% endif %}"
+                 src="/static/mai/pic/UI_TST_MBase_{{ dk }}_Tab.png"
+                 alt="" draggable="false">
+
+            {% if item.song.song_type %}
+            <img class="mc-badge {% if is_sd %}mc-badge--sd{% endif %}"
+                 src="/static/mai/pic/{{ item.song.song_type }}.png"
+                 alt="{{ item.song.song_type }}" draggable="false">
+            {% endif %}
+
+            <div class="mc-rating">{{ item.song.rating }}</div>
+
+            <div class="mc-songname">
+                <span class="mc-songname__inner">{{ item.song.name }}</span>
+            </div>
+
+            {% if item.banned %}
+            <div class="mc-ban-overlay">
+                <i class="bi bi-slash-circle"></i>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <div class="mc-footer">
+        {% if item.selectors and (is_admin or show_selector_info) %}
+        <div class="mc-selectors">
+            {% for name in item.selectors %}
+            <span class="mc-selector-chip">{{ name }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="ban-action-cell" data-song-id="{{ item.song.id }}">
+            {% if item.banned %}
+            <div class="mc-banned-info">
+                <span class="ban-badge"><i class="bi bi-slash-circle me-1"></i>已 Ban</span>
+                {% if item.banned_by and (is_admin or show_ban_by) %}
+                <span class="ban-by-name">{{ item.banned_by }}</span>
+                {% endif %}
+            </div>
+            {% else %}
+            <form method="post" action="{{ url_for('do_ban', song_id=item.song.id) }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm w-100"
+                    {% if not is_admin and user_ban_count >= max_ban %}disabled
+                    {% elif not is_admin and not user_has_selected %}disabled{% endif %}>
+                    <i class="bi bi-slash-circle me-1"></i>Ban
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endfor %}
+</div>
+
+{% else %}
+<div class="card text-center py-5">
+    <i class="bi bi-music-note-beamed" style="font-size:2.5rem;color:var(--text-muted);"></i>
+    <p class="text-muted mt-3 mb-0">暂无用户选择的歌曲。</p>
+</div>
+{% endif %}
+
+{% if is_admin %}
+<div id="modal-reset-ban" class="reset-modal" style="display:none">
+    <div class="reset-modal__box">
+        <div class="reset-modal__header">
+            <span><i class="bi bi-exclamation-triangle me-2"></i>重置 Ban 曲数据</span>
+            <button onclick="document.getElementById('modal-reset-ban').style.display='none'">&times;</button>
+        </div>
+        <div class="p-4">
+            <div class="reset-warn-box mb-4">
+                <i class="bi bi-exclamation-circle me-2" style="color:var(--pink);"></i>
+                此操作将清空<strong>所有 Ban 曲记录</strong>，所有歌曲将恢复为未 Ban 状态。
+                <br><span style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;display:block;">操作不可撤销，请确认后继续。</span>
+            </div>
+            <form method="post" action="{{ url_for('admin_reset_bans') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary"
+                            onclick="document.getElementById('modal-reset-ban').style.display='none'">取消</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-4">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>确认重置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+/* 网格 */
+.mai-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 40px 14px;
+    max-width: calc(5 * 160px + 4 * 14px);
+    margin: 0 auto;
+}
+@media (max-width: 900px) {
+    .mai-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: none; }
+}
+@media (max-width: 680px) {
+    .mai-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+    .mai-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 卡片包裹 */
+.mai-card-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 卡片主体 394×551 比例 */
+.mai-card { display: block; }
+.mai-card__body {
+    position: relative;
+    width: 100%;
+    padding-bottom: 139.85%;
+    overflow: visible;
+}
+
+/* 层1: 框架 */
+.mc-frame {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: fill; display: block;
+}
+
+/* 层2: 曲绘 */
+.mc-cover {
+    position: absolute;
+    left: 9.90%; top: 5.63%; width: 80.96%; height: 57.53%;
+    overflow: hidden; border-radius: 2px;
+    background: #0a0a12; z-index: 1;
+}
+.mc-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mc-cover__ph {
+    display: flex; width: 100%; height: 100%;
+    align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 1.5rem;
+}
+
+/* 层3: Tab */
+.mc-tab {
+    position: absolute; left: 0; width: 100%;
+    bottom: 94.37%; height: 16.70%;
+    object-fit: fill; pointer-events: none; z-index: 2;
+}
+.mc-tab--sd { transform: scaleX(-1); }
+
+/* 层4: 徽章 */
+.mc-badge {
+    position: absolute; left: 3%; top: -9.5%; width: 42%; height: auto;
+    object-fit: contain; pointer-events: none; z-index: 3;
+    image-rendering: crisp-edges;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,.8));
+}
+.mc-badge--sd { left: auto; right: 3%; }
+
+/* 定数 */
+.mc-rating {
+    position: absolute; left: 60%; right: 4%; top: 63.34%; height: 14.52%;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 3;
+    font-family: 'Space Mono', monospace; font-weight: 700; font-size: .78em;
+    color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.9);
+}
+
+/* 曲名 */
+.mc-songname {
+    position: absolute; left: 4%; right: 4%; top: 78.04%; height: 16.33%;
+    display: flex; align-items: center; justify-content: flex-start;
+    pointer-events: none; z-index: 3; overflow: hidden;
+}
+.mc-songname__inner {
+    font-size: .68em; font-weight: 600; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.9);
+    white-space: nowrap; display: inline-block; margin: 0 auto;
+}
+.mc-songname__inner.scrolling {
+    margin: 0; animation: song-scroll 6s linear infinite;
+}
+@keyframes song-scroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(var(--scroll-dist)); }
+}
+
+/* 已 Ban 遮罩 */
+.mai-card--banned .mc-cover::after {
+    content: ''; position: absolute; inset: 0;
+    background: rgba(255,45,120,0.45);
+}
+.mc-ban-overlay {
+    position: absolute; inset: 0; z-index: 4;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    color: var(--pink); font-size: 2.4em;
+    filter: drop-shadow(0 0 10px rgba(255,45,120,0.9));
+}
+
+/* 卡片下方信息条 */
+.mc-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.mc-selectors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+.mc-selector-chip {
+    font-size: 0.65rem; padding: 1px 6px; border-radius: 999px;
+    background: rgba(0,220,255,0.1); color: var(--cyan);
+    border: 1px solid rgba(0,220,255,0.25); white-space: nowrap;
+}
+.mc-banned-info {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 2px;
+}
+.ban-badge {
+    display: inline-flex; align-items: center;
+    font-size: 0.72rem; font-weight: 700;
+    font-family: 'Rajdhani', sans-serif;
+    padding: 3px 10px; border-radius: 5px;
+    background: rgba(255,45,120,0.12); color: var(--pink);
+    border: 1px solid rgba(255,45,120,0.3); letter-spacing: 0.5px;
+}
+.ban-by-name {
+    font-size: 0.65rem; color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+}
+
+/* 重置弹窗 */
+.reset-modal { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1050; display:flex; align-items:center; justify-content:center; }
+.reset-modal__box { background:var(--bg-card); border:1px solid rgba(255,45,120,0.3); border-radius:10px; width:90%; max-width:420px; overflow:hidden; }
+.reset-modal__header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:rgba(255,45,120,0.08); border-bottom:1px solid rgba(255,45,120,0.2); font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.95rem; color:var(--pink); letter-spacing:1px; }
+.reset-modal__header button { background:none; border:none; color:var(--text-muted); font-size:1.3rem; line-height:1; cursor:pointer; }
+.reset-warn-box { background:rgba(255,45,120,0.07); border:1px solid rgba(255,45,120,0.25); border-radius:8px; padding:14px 16px; font-size:0.88rem; color:var(--text-main); line-height:1.6; }
+</style>
+
+<script>
+// 曲名滚动动画
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.mc-songname').forEach(wrap => {
+        const inner = wrap.querySelector('.mc-songname__inner');
+        if (!inner) return;
+        const ov = inner.scrollWidth - wrap.clientWidth;
+        if (ov > 2) {
+            const sep = '\u3000\u3000\u3000', orig = inner.textContent;
+            inner.textContent = orig + sep + orig;
+            const dist = inner.scrollWidth / 2;
+            inner.style.setProperty('--scroll-dist', `-${dist}px`);
+            inner.style.animationDuration = `${dist / 40}s`;
+            inner.classList.add('scrolling');
+        }
+    });
+});
+
+// SSE 实时更新 Ban 状态
+(function startBanSSE() {
+    const es = new EventSource('/api/sse/ban');
+    es.onmessage = function(e) {
+        const d = JSON.parse(e.data);
+        if (d.type !== 'ban') return;
+        const wrap = document.querySelector(`.mai-card-wrap[data-song-id="${d.song_id}"]`);
+        if (!wrap) return;
+
+        // 卡片加 banned class
+        const card = wrap.querySelector('.mai-card');
+        if (card) card.classList.add('mai-card--banned');
+
+        // 加粉色遮罩图标
+        const body = wrap.querySelector('.mai-card__body');
+        if (body && !body.querySelector('.mc-ban-overlay')) {
+            const ov = document.createElement('div');
+            ov.className = 'mc-ban-overlay';
+            ov.innerHTML = '<i class="bi bi-slash-circle"></i>';
+            body.appendChild(ov);
+        }
+
+        // 更新底部操作区
+        const ac = wrap.querySelector('.ban-action-cell');
+        if (ac) {
+            const byHtml = d.banned_by
+                ? `<span class="ban-by-name">${d.banned_by}</span>` : '';
+            ac.innerHTML = `<div class="mc-banned-info">
+                <span class="ban-badge"><i class="bi bi-slash-circle me-1"></i>已 Ban</span>
+                ${byHtml}
+            </div>`;
+        }
+    };
+    es.onerror = function() { es.close(); setTimeout(startBanSSE, 3000); };
+})();
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const m = document.getElementById('modal-reset-ban');
+        if (m) m.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

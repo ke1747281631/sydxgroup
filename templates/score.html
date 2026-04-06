@@ -1,0 +1,1490 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- ══════ 顶部工具栏 ══════ -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-bar-chart-line me-2"></i>舞萌赛事计分表</h2>
+        <p class="text-muted mb-0" style="font-size:0.8rem;letter-spacing:2px;">MAIMAI TOURNAMENT SCORE BOARD</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+        {% if not current_user.is_admin %}
+            {% if session.get('score_verified') %}
+            <span class="badge" style="background:var(--green);color:#070b12;padding:6px 12px;font-size:0.78rem;">
+                <i class="bi bi-check-circle me-1"></i>已验证
+            </span>
+            {% else %}
+            <button class="btn btn-primary btn-sm" onclick="showVerify()">
+                <i class="bi bi-unlock me-1"></i>输入验证码
+            </button>
+            {% endif %}
+        {% endif %}
+        {% if current_user.is_admin %}
+        <button class="btn btn-success btn-sm" onclick="exportToExcel()">
+            <i class="bi bi-file-earmark-excel me-1"></i>导出表格
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="showAddMatch()">
+            <i class="bi bi-plus-circle me-1"></i>新增 Match
+        </button>
+        <button class="btn btn-warning btn-sm" onclick="showBatchMatch()" style="color:#1a1a1a;">
+            <i class="bi bi-shuffle me-1"></i>批量分组
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ══════ 赛事选择器 ══════ -->
+<div class="card mb-4 p-3" style="border-color:rgba(124,58,237,0.3);background:rgba(124,58,237,0.04);">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:0.85rem;color:var(--text-muted);letter-spacing:1px;">
+                <i class="bi bi-trophy me-1" style="color:#a855f7;"></i>赛事
+            </span>
+            {% if tournaments %}
+            <select id="tournament-select" class="form-select form-select-sm" style="width:auto;min-width:180px;"
+                    onchange="switchTournament(this.value)">
+                {% for t in tournaments %}
+                <option value="{{ t.id }}" {% if active_tournament and t.id == active_tournament.id %}selected{% endif %}>
+                    {{ t.name }}{% if t.is_active %} ★{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <span class="text-muted" style="font-size:0.82rem;">暂无赛事</span>
+            {% endif %}
+            {% if active_tournament %}
+            <span class="badge" style="background:rgba(124,58,237,0.15);color:#a855f7;font-size:0.72rem;">
+                {{ matches | length }} 场 Match
+            </span>
+            {% endif %}
+        </div>
+        {% if current_user.is_admin %}
+        <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-sm" style="background:rgba(124,58,237,0.15);color:#a855f7;border-color:rgba(124,58,237,0.3);"
+                    onclick="showTournamentManager()">
+                <i class="bi bi-gear me-1"></i>管理赛事
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ══════ Match 区块（动态渲染） ══════ -->
+<script>
+const ALL_MATCHES_DATA = [
+{% for match in matches %}
+  {
+    id: {{ match.id }},
+    name: {{ match.name | tojson }},
+    players: [{% for e in match.entries %}{{ e.player_name | tojson }}{% if not loop.last %},{% endif %}{% endfor %}]
+  }{% if not loop.last %},{% endif %}
+{% endfor %}
+];
+</script>
+<div id="matches-container">
+{% if matches %}
+{% for match in matches %}
+<div class="score-section mb-4" id="match-block-{{ match.id }}" data-match-id="{{ match.id }}">
+    <div class="section-bar" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">
+        <span class="match-title" data-match-id="{{ match.id }}"
+              {% if current_user.is_admin %}ondblclick="renameMatch({{ match.id }}, this)"{% endif %}
+              title="{% if current_user.is_admin %}双击重命名{% endif %}">
+            🎵 {{ match.name }}
+        </span>
+        {% if current_user.is_admin %}
+        <div class="d-flex gap-2 align-items-center">
+            <span style="font-size:0.7rem;color:rgba(255,255,255,0.6);">双击标题重命名</span>
+            <button class="btn-bar" onclick="showAutoResult({{ match.id }})">
+                <i class="bi bi-trophy"></i> 设置晋级
+            </button>
+            <button class="btn-bar btn-bar-danger" onclick="deleteMatch({{ match.id }}, this)">
+                <i class="bi bi-trash"></i> 删除
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="table-responsive">
+        <table class="score-table match-table" data-match-id="{{ match.id }}">
+            <thead>
+                <tr>
+                    <th style="width:36px;text-align:center;color:var(--text-muted);font-size:0.72rem;">#</th>
+                    <th style="min-width:130px">选手</th>
+                    {% for song in match.songs %}
+                    <th class="song-col" data-song-col-id="{{ song.id }}" data-song-idx="{{ loop.index0 }}" style="min-width:150px;text-align:center">
+                        <div class="song-header">
+                            <span class="song-title-text">{{ song.title }}</span>
+                            <span class="diff-pill diff-{{ song.difficulty | lower | replace(':','') }}">{{ song.difficulty }}</span>
+                            {% if current_user.is_admin %}
+                            <div class="song-col-actions">
+                                <button class="icon-btn-xs" onclick="changeSong({{ match.id }}, {{ loop.index0 }}, {{ song.id }})" title="更换歌曲">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                                <button class="icon-btn-xs danger" onclick="removeSongCol({{ song.id }}, this)" title="移除此列">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </th>
+                    {% endfor %}
+                    {% if current_user.is_admin %}
+                    <th style="width:44px;text-align:center">
+                        <button class="icon-btn-xs" onclick="addSongCol({{ match.id }})" title="添加曲目列">
+                            <i class="bi bi-plus-circle"></i>
+                        </button>
+                    </th>
+                    {% endif %}
+                    <th style="min-width:110px;text-align:center">合计</th>
+                    <th style="min-width:80px;text-align:center">判定</th>
+                    {% if current_user.is_admin %}<th style="width:50px"></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody id="match-tbody-{{ match.id }}">
+                {% for entry in match.entries %}
+                <tr data-entry-id="{{ entry.id }}">
+                    <td data-seq-col style="text-align:center;font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--text-muted);width:36px;">{{ loop.index }}</td>
+                    <td class="player-name-cell" data-entry-id="{{ entry.id }}"{% if current_user.is_admin %} ondblclick="startNameEdit(this)" title="双击修改名称"{% endif %}>
+                        <div class="player-name-display" style="font-weight:600;font-size:0.88rem">{{ entry.player_name }}</div>
+                        {% if entry.player_id %}<div class="mono muted" style="font-size:0.7rem">{{ entry.player_id }}</div>{% endif %}
+                        {% if current_user.is_admin %}
+                        <input class="player-name-input" type="text" value="{{ entry.player_name }}" style="display:none;font-weight:600;font-size:0.88rem;width:100%;background:rgba(13,20,33,.9);border:1px solid var(--cyan);color:var(--text-main);border-radius:4px;padding:2px 6px;" onblur="commitNameEdit(this)" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.style.display='none';this.previousElementSibling.style.display='';}">
+                        {% endif %}
+                    </td>
+                    {% for score_val in entry.scores %}
+                    <td class="score-cell" data-entry-id="{{ entry.id }}" data-song-idx="{{ loop.index0 }}"
+                        style="text-align:center;{% if current_user.is_admin %}cursor:pointer{% else %}cursor:default{% endif %}"
+                        {% if current_user.is_admin %}onclick="startEdit(this)"{% endif %}>
+                        <div class="score-display">
+                            {% if score_val %}
+                            <div class="mono" style="font-size:0.82rem">{{ score_val }}</div>
+                            <div class="mt-1">{{ score_val | rank_badge_html | safe }}</div>
+                            {% else %}{% if current_user.is_admin %}<span class="muted add-hint">点击输入</span>{% endif %}{% endif %}
+                        </div>
+                        <input class="score-input" type="text" value="{{ score_val }}"
+                               onblur="commitEdit(this)" onkeydown="handleScoreKey(event, this)"
+                               style="display:none">
+                    </td>
+                    {% endfor %}
+                    {% if current_user.is_admin %}
+                    <!-- 额外歌曲列的空占位（如果 entry scores 少于 song 数量） -->
+                    {% for i in range(match.songs|length - entry.scores|length) %}
+                    <td class="score-cell" data-entry-id="{{ entry.id }}" data-song-idx="{{ entry.scores|length + loop.index0 }}"
+                        style="text-align:center;cursor:pointer" onclick="startEdit(this)">
+                        <div class="score-display"><span class="muted">-</span></div>
+                        <input class="score-input" type="text" value=""
+                               onblur="commitEdit(this)" onkeydown="handleScoreKey(event, this)"
+                               style="display:none">
+                    </td>
+                    {% endfor %}
+                    <th style="width:44px"></th><!-- 对应加列按钮列 -->
+                    {% endif %}
+                    <td style="text-align:center">
+                        <strong class="mono cyan entry-total">{{ entry.total }}</strong>
+                    </td>
+                    <td style="text-align:center">
+                        {% if current_user.is_admin %}
+                        <select class="result-select" onchange="updateResult({{ entry.id }}, this.value)">
+                            <option value="" {% if not entry.result %}selected{% endif %}>待定</option>
+                            <option value="晋级" {% if entry.result=='晋级' %}selected{% endif %}>晋级</option>
+                            <option value="候补" {% if entry.result=='候补' %}selected{% endif %}>候补</option>
+                            <option value="淘汰" {% if entry.result=='淘汰' %}selected{% endif %}>淘汰</option>
+                        </select>
+                        {% else %}
+                            {% if entry.result == '晋级' %}<span class="sbadge sbadge-advance">晋级</span>
+                            {% elif entry.result == '淘汰' %}<span class="sbadge sbadge-out">淘汰</span>
+                            {% elif entry.result == '候补' %}<span class="sbadge sbadge-wait">候补</span>
+                            {% else %}<span class="muted">待定</span>{% endif %}
+                        {% endif %}
+                    </td>
+                    {% if current_user.is_admin %}
+                    <td>
+                        <button class="icon-btn danger" onclick="deleteEntry({{ entry.id }}, this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+
+        </table>
+    </div>
+
+    <!-- 快速添加选手 -->
+    {% if current_user.is_admin %}
+    <div class="add-player-bar" id="add-player-{{ match.id }}">
+        <input type="text" class="add-player-input" placeholder="输入选手名称后按 Enter 或点击添加"
+               onkeydown="if(event.key==='Enter') addPlayer({{ match.id }}, this)">
+        <button class="btn btn-success btn-sm" onclick="addPlayer({{ match.id }}, this.previousElementSibling)">
+            <i class="bi bi-plus me-1"></i>添加选手
+        </button>
+        {% if loop.index > 1 %}
+        <button class="btn btn-warning btn-sm" style="color:#1a1a1a"
+                data-match-id="{{ match.id }}"
+                data-advanced='{{ match.prev_advanced | tojson }}'
+                onclick="importAdvanced(this)"
+                {% if not match.prev_advanced %}disabled title="上场无晋级选手"{% endif %}>
+            <i class="bi bi-arrow-down-circle me-1"></i>导入上场晋级{% if match.prev_advanced %}（{{ match.prev_advanced | length }}人）{% endif %}
+        </button>
+        <button class="btn btn-outline-info btn-sm"
+                data-match-id="{{ match.id }}"
+                data-roster='{{ match.first_roster | tojson }}'
+                onclick="importFirstRoster(this)"
+                {% if not match.first_roster %}disabled title="第一场无可导入选手"{% endif %}>
+            <i class="bi bi-people me-1"></i>导入首场名单{% if match.first_roster %}（{{ match.first_roster | length }}人）{% endif %}
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+</div>
+
+<!-- ══════ 浮层：批量分组生成 Match ══════ -->
+{% if current_user.is_admin %}
+<div id="batch-match-overlay" class="quick-overlay" style="display:none">
+    <div class="quick-panel" style="width:600px;max-width:96vw;">
+        <div class="quick-header">
+            <span><i class="bi bi-shuffle me-2"></i>批量分组生成 Match</span>
+            <button onclick="document.getElementById('batch-match-overlay').style.display='none'">&times;</button>
+        </div>
+        <div class="quick-body" style="display:flex;flex-direction:column;gap:14px;max-height:72vh;overflow-y:auto;">
+            <div>
+                <label style="color:var(--cyan);">来源选手名单</label>
+                <select id="batch-source-match" class="form-select form-select-sm mt-1" onchange="batchUpdateSource()">
+                    <option value="__all__">全部 Match 合并（去重）</option>
+                    {% for match in matches %}
+                    <option value="{{ loop.index0 }}">{{ match.name }}（{{ match.entries|length }} 人）</option>
+                    {% endfor %}
+                </select>
+                <div id="batch-player-pool" class="batch-pool mt-2"></div>
+            </div>
+            <div class="batch-settings-row">
+                <div>
+                    <label>生成场次数量</label>
+                    <input type="number" id="batch-match-count" class="form-control form-control-sm" value="4" min="1" max="20" oninput="batchPreview()">
+                </div>
+                <div>
+                    <label>每场人数上限</label>
+                    <input type="number" id="batch-group-size" class="form-control form-control-sm" value="4" min="1" max="20" oninput="batchPreview()">
+                </div>
+                <div>
+                    <label>场次名前缀</label>
+                    <input type="text" id="batch-name-prefix" class="form-control form-control-sm" value="16强" placeholder="如：16强" oninput="batchPreview()">
+                </div>
+                <div style="display:flex;align-items:flex-end;">
+                    <button class="btn btn-outline-secondary btn-sm w-100" onclick="batchShuffle()">
+                        <i class="bi bi-arrow-repeat me-1"></i>重新随机
+                    </button>
+                </div>
+            </div>
+            <div>
+                <label class="d-flex align-items-center gap-2" style="cursor:pointer;color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:0.82rem;font-weight:400;">
+                    <input type="checkbox" id="batch-advanced-only" class="form-check-input mt-0" onchange="batchUpdateSource()">
+                    <span>仅使用已标记「晋级」的选手（适合淘汰赛流程）</span>
+                </label>
+            </div>
+            <div>
+                <label style="color:var(--cyan);">分组预览</label>
+                <div id="batch-preview" class="batch-preview-grid mt-2"></div>
+            </div>
+        </div>
+        <div class="quick-footer">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('batch-match-overlay').style.display='none'">取消</button>
+            <button class="btn btn-warning btn-sm px-4" style="color:#1a1a1a;" onclick="confirmBatchMatch()">
+                <i class="bi bi-plus-circle me-1"></i>创建所有 Match
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ══════ 歌曲选择器弹层（非 modal，直接 overlay） ══════ -->
+<div id="song-picker" style="display:none">
+    <div class="song-picker-backdrop" onclick="closeSongPicker()"></div>
+    <div class="song-picker-panel">
+        <div class="song-picker-header">
+            <span>选择歌曲</span>
+            <button onclick="closeSongPicker()" style="background:none;border:none;color:var(--text-muted);font-size:1.2rem;cursor:pointer;">&times;</button>
+        </div>
+        <input type="text" id="song-search" class="form-control form-control-sm mb-3"
+               placeholder="搜索歌曲名..." oninput="filterSongs(this.value)">
+        <div id="song-list" style="max-height:360px;overflow-y:auto"></div>
+    </div>
+</div>
+
+<!-- ══════ 浮层：导入名单编辑 ══════ -->
+{% if current_user.is_admin %}
+<div id="import-roster-overlay" class="quick-overlay" style="display:none">
+    <div class="quick-panel" style="max-width:480px;">
+        <div class="quick-header" style="background:linear-gradient(135deg,#0ea5e9,#06b6d4);">
+            <span><i class="bi bi-people me-2"></i><span id="import-roster-title">导入名单</span></span>
+            <button onclick="document.getElementById('import-roster-overlay').style.display='none'">&times;</button>
+        </div>
+        <div class="quick-body" style="display:flex;flex-direction:column;gap:12px;max-height:65vh;">
+            <div class="d-flex justify-content-between align-items-center">
+                <span style="font-size:0.78rem;color:var(--text-muted);">点击选手可取消/恢复勾选</span>
+                <button class="btn btn-sm btn-outline-secondary" style="font-size:0.72rem;padding:2px 10px;" onclick="toggleAllRoster()" id="import-toggle-all-btn">全选</button>
+            </div>
+            <div id="import-roster-list" style="display:flex;flex-wrap:wrap;gap:6px;max-height:40vh;overflow-y:auto;padding:4px 0;"></div>
+            <div class="d-flex gap-2">
+                <input id="import-roster-add-input" type="text" class="form-control form-control-sm"
+                       placeholder="手动添加选手名" style="flex:1;"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();addToImportRoster();}">
+                <button class="btn btn-sm btn-outline-info" onclick="addToImportRoster()">
+                    <i class="bi bi-plus"></i>
+                </button>
+            </div>
+            <div class="d-flex justify-content-between align-items-center" style="border-top:1px solid var(--border);padding-top:10px;">
+                <span id="import-roster-count" style="font-size:0.78rem;color:var(--text-muted);"></span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-secondary" onclick="document.getElementById('import-roster-overlay').style.display='none'">取消</button>
+                    <button class="btn btn-sm" style="background:var(--cyan);color:var(--bg-deep);font-weight:700;" onclick="confirmImportRoster()">
+                        <i class="bi bi-check2-circle me-1"></i>确认导入
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ══════ 浮层：赛事管理 ══════ -->
+{% if current_user.is_admin %}
+<div id="tournament-overlay" class="quick-overlay" style="display:none">
+    <div class="quick-panel" style="max-width:480px;">
+        <div class="quick-header" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">
+            <span><i class="bi bi-trophy me-2"></i>赛事管理</span>
+            <button onclick="document.getElementById('tournament-overlay').style.display='none'">&times;</button>
+        </div>
+        <div class="quick-body">
+            <div class="mb-3">
+                <label style="font-size:0.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">新建赛事</label>
+                <div class="d-flex gap-2">
+                    <input type="text" id="new-tournament-name" class="form-control form-control-sm"
+                           placeholder="如：第三届舞萌大赛" maxlength="200"
+                           onkeydown="if(event.key==='Enter') addTournament()">
+                    <button class="btn btn-sm px-3" style="background:#a855f7;color:#fff;white-space:nowrap;" onclick="addTournament()">
+                        <i class="bi bi-plus-lg me-1"></i>创建
+                    </button>
+                </div>
+            </div>
+            <hr style="border-color:var(--border);margin:12px 0;">
+            <div id="tournament-list" style="max-height:320px;overflow-y:auto;">
+                <div class="text-center text-muted py-3" style="font-size:0.82rem;">加载中…</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ══════ 浮层：新增Match ══════ -->
+<div id="add-match-overlay" class="quick-overlay" style="display:none">
+    <div class="quick-panel">
+        <div class="quick-header"><span>新增 Match</span><button onclick="document.getElementById('add-match-overlay').style.display='none'">&times;</button></div>
+        <div class="quick-body">
+            <label>Match 名称</label>
+            <input type="text" id="new-match-name" class="form-control form-control-sm" placeholder="如：Match 1 / 决赛"
+                   onkeydown="if(event.key==='Enter') confirmAddMatch()">
+        </div>
+        <div class="quick-footer">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('add-match-overlay').style.display='none'">取消</button>
+            <button class="btn btn-primary btn-sm" onclick="confirmAddMatch()">创建</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════ 浮层：设置晋级 ══════ -->
+<div id="auto-result-overlay" class="quick-overlay" style="display:none" data-match-id="">
+    <div class="quick-panel">
+        <div class="quick-header"><span>🏆 设置晋级人数</span><button onclick="document.getElementById('auto-result-overlay').style.display='none'">&times;</button></div>
+        <div class="quick-body">
+            <div class="row g-2">
+                <div class="col-6">
+                    <label>晋级人数</label>
+                    <input type="number" id="advance-count" class="form-control form-control-sm" value="1" min="1">
+                </div>
+                <div class="col-6">
+                    <label>候补人数</label>
+                    <input type="number" id="wait-count" class="form-control form-control-sm" value="0" min="0">
+                </div>
+            </div>
+        </div>
+        <div class="quick-footer">
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('auto-result-overlay').style.display='none'">取消</button>
+            <button class="btn btn-warning btn-sm" onclick="confirmAutoResult()">确认</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════ 浮层：验证码登记（非管理员） ══════ -->
+{% if not current_user.is_admin %}
+<div id="verify-overlay" class="quick-overlay" style="display:none">
+    <div class="quick-panel">
+        <div class="quick-header">
+            <span><i class="bi bi-key me-1"></i>验证码登记</span>
+            <button onclick="document.getElementById('verify-overlay').style.display='none'">&times;</button>
+        </div>
+        <form method="post" action="{{ url_for('score') }}">
+            <input type="hidden" name="action" value="verify">
+            <div class="quick-body" style="display:flex;flex-direction:column;gap:10px;">
+                <div>
+                    <label class="field-label mb-1">玩家名称</label>
+                    <input type="text" name="player_name" class="form-control form-control-sm"
+                           placeholder="留空则使用账号名：{{ current_user.username }}"
+                           value="{{ current_user.username }}">
+                </div>
+                <div>
+                    <label class="field-label mb-1">验证码</label>
+                    <input type="text" name="code" class="form-control form-control-sm"
+                           placeholder="请输入验证码" autofocus
+                           onkeydown="if(event.key==='Enter') this.closest('form').submit()">
+                </div>
+                <div style="font-size:0.78rem;color:var(--text-muted);">
+                    <i class="bi bi-info-circle me-1"></i>验证成功后将自动登记到当前场次
+                </div>
+            </div>
+            <div class="quick-footer">
+                <button type="button" class="btn btn-secondary btn-sm"
+                        onclick="document.getElementById('verify-overlay').style.display='none'">取消</button>
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-check2 me-1"></i>确认登记
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+
+
+<style>
+/* ── 区块容器 ── */
+.score-section { border-radius:10px; border:1px solid var(--border); }
+
+/* ── 区块条 ── */
+.section-bar {
+    display:flex; justify-content:space-between; align-items:center;
+    border-radius:10px 10px 0 0; padding:9px 14px; margin-bottom:0;
+}
+.section-bar span { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1rem; color:#fff; letter-spacing:2px; }
+.btn-bar {
+    background:rgba(255,255,255,0.18); border:none; color:#fff;
+    font-family:'Rajdhani',sans-serif; font-weight:600; font-size:0.78rem;
+    padding:3px 10px; border-radius:4px; cursor:pointer; letter-spacing:0.5px;
+    transition:background 0.15s;
+}
+.btn-bar:hover { background:rgba(255,255,255,0.32); }
+.btn-bar-danger { background:rgba(255,60,60,0.35); }
+.btn-bar-danger:hover { background:rgba(255,60,60,0.6); }
+
+/* ── 表格 ── */
+.score-table { width:100%; border-collapse:collapse; font-size:0.84rem; }
+.score-table th {
+    background:rgba(255,255,255,0.04); color:var(--text-muted);
+    font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:1px;
+    font-size:0.72rem; text-transform:uppercase; padding:8px 10px;
+    border-bottom:1px solid var(--border);
+}
+.score-table td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--text-main); }
+.score-table tbody tr:hover td { background:rgba(0,220,255,0.04); }
+tfoot tr.total-row td { background:rgba(168,85,247,0.07); border-top:1px solid rgba(168,85,247,0.25); padding:7px 10px; }
+
+/* ── 歌曲列头 ── */
+.song-header { display:flex; flex-direction:column; align-items:center; gap:3px; }
+.song-title-text { font-size:0.78rem; color:var(--text-main); font-weight:500; text-align:center; line-height:1.3; }
+.song-col-actions { display:flex; gap:3px; margin-top:2px; }
+
+/* ── 难度药丸 ── */
+.diff-pill { display:inline-block; font-size:0.58rem; font-weight:700; padding:1px 5px; border-radius:3px; letter-spacing:0.5px; }
+.diff-easy       { background:#22c55e; color:#fff; }
+.diff-basic      { background:#f59e0b; color:#fff; }
+.diff-advanced   { background:#f97316; color:#fff; }
+.diff-expert     { background:#ef4444; color:#fff; }
+.diff-master     { background:#a855f7; color:#fff; }
+.diff-remaster   { background:#ec4899; color:#fff; }
+
+/* ── 段位徽章 ── */
+.rbadge { display:inline-block; font-family:'Space Mono',monospace; font-size:0.6rem; font-weight:700; padding:1px 5px; border-radius:3px; }
+.rank-img { display:inline-block; height:1.3rem; width:auto; vertical-align:middle; object-fit:contain; filter:drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
+.rb-sssp { background:#ffd166; color:#1a1a1a; }
+.rb-sss  { background:#ffd166cc; color:#1a1a1a; }
+.rb-ssp  { background:#a78bfa; color:#fff; }
+.rb-ss   { background:#8b5cf6; color:#fff; }
+.rb-sp   { background:#f97316; color:#fff; }
+.rb-s    { background:#ef4444; color:#fff; }
+.rb-aaa  { background:#06d6a0; color:#0a2a20; }
+.rb-aa   { background:#059669; color:#fff; }
+.rb-a    { background:#00dcff; color:#070b12; }
+.rb-bbb  { background:#6b7fa3; color:#fff; }
+.rb-bb   { background:#4b5563; color:#e5e7eb; }
+.rb-b    { background:#374151; color:#d1d5db; }
+.rb-c    { background:#1f2937; color:#9ca3af; }
+.rb-d    { background:#111827; color:#6b7280; border:1px solid #374151; }
+
+/* ── 状态徽章 ── */
+.sbadge { display:inline-block; font-family:'Rajdhani',sans-serif; font-size:0.75rem; font-weight:700; padding:2px 9px; border-radius:4px; letter-spacing:0.5px; }
+.sbadge-advance { background:linear-gradient(135deg,#06d6a0,#00b894); color:#fff; }
+.sbadge-out     { background:linear-gradient(135deg,#ff2d78,#cc1155); color:#fff; }
+.sbadge-wait    { background:linear-gradient(135deg,#ffd166,#f9ca24); color:#1a1a1a; }
+
+/* ── 判定下拉 ── */
+.result-select {
+    background:rgba(13,20,33,0.9); border:1px solid var(--border); color:var(--text-main);
+    border-radius:4px; padding:2px 6px; font-size:0.78rem; font-family:'Rajdhani',sans-serif;
+    cursor:pointer;
+}
+.result-select:focus { border-color:var(--cyan); outline:none; }
+
+/* ── 内联编辑 ── */
+.score-cell { position:relative; }
+.score-cell:hover .score-display { opacity:0.7; }
+.add-hint { font-size:0.7rem; color:var(--text-muted); }
+.score-input {
+    width:100%; background:rgba(0,220,255,0.1); border:1px solid var(--cyan);
+    color:var(--text-main); border-radius:4px; padding:3px 6px;
+    font-family:'Space Mono',monospace; font-size:0.82rem; text-align:center;
+}
+.score-input:focus { outline:none; box-shadow:0 0 0 2px rgba(0,220,255,0.3); }
+
+/* ── 图标按钮 ── */
+.icon-btn { background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:0.85rem; padding:3px 5px; border-radius:4px; transition:all 0.15s; }
+.icon-btn:hover { color:var(--text-main); background:rgba(255,255,255,0.08); }
+.icon-btn.danger:hover { color:var(--pink); background:rgba(255,45,120,0.12); }
+.icon-btn-xs { background:rgba(255,255,255,0.08); border:none; cursor:pointer; color:var(--text-muted); font-size:0.7rem; padding:2px 5px; border-radius:3px; transition:all 0.15s; }
+.icon-btn-xs:hover { color:var(--cyan); background:rgba(0,220,255,0.12); }
+.icon-btn-xs.danger:hover { color:var(--pink); background:rgba(255,45,120,0.12); }
+
+/* ── 快速添加选手 ── */
+.add-player-bar {
+    display:flex; gap:8px; align-items:center;
+    padding:10px 14px; background:rgba(255,255,255,0.02); border-top:1px solid var(--border);
+}
+.add-player-input {
+    flex:1; background:rgba(13,20,33,0.8); border:1px solid var(--border);
+    color:var(--text-main); border-radius:6px; padding:5px 10px; font-size:0.85rem;
+}
+.add-player-input:focus { border-color:var(--cyan); outline:none; box-shadow:0 0 0 2px rgba(0,220,255,0.15); }
+
+/* ── 歌曲选择器 ── */
+.song-picker-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1998; }
+.song-picker-panel {
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:420px; max-width:95vw; background:var(--bg-panel); border:1px solid var(--border);
+    border-radius:12px; padding:20px; z-index:1999;
+}
+.song-picker-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.song-picker-header span { font-family:'Rajdhani',sans-serif; font-weight:700; color:var(--cyan); font-size:1.05rem; }
+.song-item-cover {
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: #0a0a12;
+}
+.song-item-cover--ph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.2);
+    font-size: 1.1rem;
+}
+.song-item-info {
+    flex: 1;
+    min-width: 0;
+}
+.song-item {
+    display:flex; align-items:center; gap:10px; padding:8px 10px;
+    border-radius:6px; cursor:pointer; border:1px solid transparent; margin-bottom:4px;
+    transition:all 0.15s;
+}
+.song-item:hover { background:rgba(0,220,255,0.07); border-color:rgba(0,220,255,0.2); }
+.song-item.banned { opacity:0.45; cursor:not-allowed; }
+.song-item.used-other { opacity:0.5; cursor:not-allowed; background:rgba(100,100,100,0.15); }
+.song-item-name { font-size:0.85rem; font-weight:500; flex:1; }
+.song-item-meta { font-size:0.72rem; color:var(--text-muted); }
+
+/* ── 通用浮层 ── */
+.quick-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:1998; display:flex; align-items:center; justify-content:center; }
+.quick-panel { background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; width:360px; max-width:95vw; overflow:visible; }
+.quick-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(0,220,255,0.05); border-bottom:1px solid var(--border); }
+.quick-header span { font-family:'Rajdhani',sans-serif; font-weight:700; color:var(--cyan); font-size:1rem; letter-spacing:1px; }
+.quick-header button { background:none; border:none; color:var(--text-muted); font-size:1.3rem; cursor:pointer; line-height:1; }
+.quick-body { padding:16px; }
+.quick-footer { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border); }
+
+/* 导入名单 chip */
+.roster-chip {
+    display:inline-flex; align-items:center; padding:4px 12px;
+    border-radius:20px; font-size:0.8rem; cursor:pointer;
+    border:1px solid var(--border); background:rgba(255,255,255,0.03);
+    color:var(--text-muted); transition:all .15s; user-select:none;
+}
+.roster-chip--on {
+    border-color:var(--cyan); background:rgba(0,220,255,0.12);
+    color:var(--cyan); font-weight:600;
+}
+.roster-chip:hover { border-color:var(--cyan); }
+
+/* ── 辅助 ── */
+.mono { font-family:'Space Mono',monospace; }
+.muted { color:var(--text-muted); }
+.cyan { color:var(--cyan); }
+label { display:block; font-family:'Rajdhani',sans-serif; font-size:0.78rem; font-weight:600; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:4px; }
+
+/* ── 批量分组 ── */
+.batch-settings-row { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; }
+@media(max-width:520px) { .batch-settings-row { grid-template-columns:1fr 1fr; } }
+.batch-pool { display:flex; flex-wrap:wrap; gap:5px; min-height:28px; }
+.batch-pool-chip {
+    font-size:0.72rem; padding:2px 9px; border-radius:999px;
+    background:rgba(0,220,255,0.1); color:var(--cyan);
+    border:1px solid rgba(0,220,255,0.2);
+    font-family:'Space Mono',monospace;
+}
+.batch-preview-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+.batch-group-card { border:1px solid var(--border); border-radius:8px; overflow:hidden; background:rgba(255,255,255,0.02); }
+.batch-group-card__header {
+    padding:6px 10px; border-bottom:1px solid var(--border);
+    font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.85rem; letter-spacing:0.5px;
+}
+.batch-group-card__body { padding:8px 10px; display:flex; flex-direction:column; gap:3px; }
+.batch-group-player {
+    font-size:0.78rem; color:var(--text-main); padding:2px 0;
+    border-bottom:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; gap:5px;
+}
+.batch-group-player:last-child { border-bottom:none; }
+.batch-player-num { font-family:'Space Mono',monospace; font-size:0.62rem; color:var(--text-muted); min-width:14px; }
+</style>
+
+<script>
+const IS_ADMIN = {{ 'true' if current_user.is_admin else 'false' }};
+
+// ── 工具函数 ──
+function rankBadge(v) {
+    const f = parseFloat(String(v).replace('%',''));
+    if (isNaN(f)) return '';
+    let key;
+    if (f >= 100.5)      key = 'SSSp';
+    else if (f >= 100.0) key = 'SSS';
+    else if (f >= 99.5)  key = 'SSp';
+    else if (f >= 99.0)  key = 'SS';
+    else if (f >= 98.0)  key = 'Sp';
+    else if (f >= 97.0)  key = 'S';
+    else if (f >= 94.0)  key = 'AAA';
+    else if (f >= 90.0)  key = 'AA';
+    else if (f >= 80.0)  key = 'A';
+    else if (f >= 75.0)  key = 'BBB';
+    else if (f >= 70.0)  key = 'BB';
+    else if (f >= 60.0)  key = 'B';
+    else if (f >= 50.0)  key = 'C';
+    else                 key = 'D';
+    return `<img src="/static/mai/pic/UI_TTR_Rank_${key}.png" class="rank-img" alt="${key}">`;
+}
+
+function statusBadge(r) {
+    if (r === '晋级') return '<span class="sbadge sbadge-advance">晋级</span>';
+    if (r === '淘汰') return '<span class="sbadge sbadge-out">淘汰</span>';
+    if (r === '候补') return '<span class="sbadge sbadge-wait">候补</span>';
+    return '<span class="muted">待定</span>';
+}
+
+async function api(url, body) {
+    const r = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    return r.json();
+}
+
+// ── 内联编辑成绩 ──
+function startEdit(cell) {
+    if (!IS_ADMIN) return;
+    const display = cell.querySelector('.score-display');
+    const input   = cell.querySelector('.score-input');
+    display.style.display = 'none';
+    input.style.display   = 'block';
+    input.focus();
+    input.select();
+}
+
+async function commitEdit(input) {
+    const cell     = input.closest('.score-cell');
+    const display  = cell.querySelector('.score-display');
+    const entryId  = parseInt(cell.dataset.entryId);
+    const songIdx  = parseInt(cell.dataset.songIdx);
+    const value    = input.value.trim();
+
+    input.style.display   = 'none';
+    display.style.display = 'block';
+
+    const res = await api('/api/score/update_cell', {entry_id: entryId, song_idx: songIdx, value});
+    if (res.ok) {
+        // 更新显示
+        if (value) {
+            display.innerHTML = `<div class="mono" style="font-size:0.82rem">${value}</div><div class="mt-1">${rankBadge(value)}</div>`;
+        } else {
+            display.innerHTML = IS_ADMIN ? '<span class="muted add-hint">点击输入</span>' : '';
+        }
+        // 更新总分
+        const row = cell.closest('tr');
+        const totalCell = row.querySelector('.entry-total');
+        if (totalCell) totalCell.textContent = res.total;
+    }
+}
+
+function handleScoreKey(e, input) {
+    if (e.key === 'Enter') { input.blur(); }
+    if (e.key === 'Escape') {
+        const cell = input.closest('.score-cell');
+        input.style.display = 'none';
+        cell.querySelector('.score-display').style.display = 'block';
+    }
+    // Tab 跳到同行下一个 score-cell
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        const row   = input.closest('tr');
+        const cells = [...row.querySelectorAll('.score-cell')];
+        const idx   = cells.indexOf(input.closest('.score-cell'));
+        input.blur();
+        const next = cells[idx + (e.shiftKey ? -1 : 1)];
+        if (next) setTimeout(() => startEdit(next), 50);
+    }
+}
+
+// ── 判定结果 ──
+async function updateResult(entryId, value) {
+    await api('/api/score/update_result', {entry_id: entryId, result: value});
+}
+
+// ── 删除选手行 ──
+async function deleteEntry(entryId, btn) {
+    if (!confirm('确定删除此选手的成绩？')) return;
+    const res = await api('/api/score/delete_entry', {entry_id: entryId});
+    if (res.ok) {
+        const tbody = btn.closest('tbody');
+        btn.closest('tr').remove();
+        // 重新编号
+        tbody.querySelectorAll('tr').forEach((tr, i) => {
+            const seqTd = tr.querySelector('td[data-seq-col]');
+            if (seqTd) seqTd.textContent = i + 1;
+        });
+    }
+}
+
+
+// ── 从上场晋级批量导入 ──
+// ── 导入名单（可编辑弹窗） ──
+let _importMatchId = null;
+
+function openImportRoster(matchId, names, title) {
+    _importMatchId = matchId;
+    document.getElementById('import-roster-title').textContent = title;
+    const list = document.getElementById('import-roster-list');
+    list.innerHTML = '';
+    names.forEach(n => _appendRosterChip(list, n, true));
+    _updateRosterCount();
+    document.getElementById('import-roster-add-input').value = '';
+    document.getElementById('import-roster-overlay').style.display = 'flex';
+}
+
+function _appendRosterChip(container, name, checked) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'roster-chip' + (checked ? ' roster-chip--on' : '');
+    chip.dataset.name = name;
+    chip.textContent = name;
+    chip.onclick = () => { chip.classList.toggle('roster-chip--on'); _updateRosterCount(); };
+    container.appendChild(chip);
+}
+
+function _updateRosterCount() {
+    const total = document.querySelectorAll('#import-roster-list .roster-chip').length;
+    const on = document.querySelectorAll('#import-roster-list .roster-chip--on').length;
+    document.getElementById('import-roster-count').textContent = `已选 ${on} / ${total} 人`;
+    const btn = document.getElementById('import-toggle-all-btn');
+    if (btn) btn.textContent = on >= total ? '全不选' : '全选';
+}
+
+function addToImportRoster() {
+    const input = document.getElementById('import-roster-add-input');
+    const name = input.value.trim();
+    if (!name) return;
+    const list = document.getElementById('import-roster-list');
+    // 去重
+    if ([...list.querySelectorAll('.roster-chip')].some(c => c.dataset.name === name)) {
+        input.value = ''; input.focus(); return;
+    }
+    _appendRosterChip(list, name, true);
+    _updateRosterCount();
+    input.value = '';
+    input.focus();
+}
+
+function toggleAllRoster() {
+    const chips = document.querySelectorAll('#import-roster-list .roster-chip');
+    const onCount = document.querySelectorAll('#import-roster-list .roster-chip--on').length;
+    const selectAll = onCount < chips.length; // if not all on, select all; otherwise deselect all
+    chips.forEach(c => c.classList.toggle('roster-chip--on', selectAll));
+    document.getElementById('import-toggle-all-btn').textContent = selectAll ? '全不选' : '全选';
+    _updateRosterCount();
+}
+
+async function confirmImportRoster() {
+    const chips = document.querySelectorAll('#import-roster-list .roster-chip--on');
+    const names = [...chips].map(c => c.dataset.name).filter(Boolean);
+    if (names.length === 0) { alert('未选择任何选手'); return; }
+    document.getElementById('import-roster-overlay').style.display = 'none';
+    let ok = 0;
+    for (const name of names) {
+        try {
+            const res = await api('/api/score/add_player', {match_id: _importMatchId, player_name: name});
+            if (res.ok) ok++;
+        } catch(e) {}
+    }
+    if (ok > 0) location.reload();
+    else alert('导入失败，请刷新重试');
+}
+
+function importAdvanced(btn) {
+    const matchId = parseInt(btn.dataset.matchId);
+    const names = JSON.parse(btn.dataset.advanced);
+    if (!names || names.length === 0) return;
+    openImportRoster(matchId, names, '导入上场晋级选手');
+}
+
+function importFirstRoster(btn) {
+    const matchId = parseInt(btn.dataset.matchId);
+    const names = JSON.parse(btn.dataset.roster);
+    if (!names || names.length === 0) return;
+    openImportRoster(matchId, names, '导入首场名单');
+}
+
+// ── 选手名称内联编辑 ──
+function startNameEdit(cell) {
+    const display = cell.querySelector('.player-name-display');
+    const input = cell.querySelector('.player-name-input');
+    if (!input) return;
+    display.style.display = 'none';
+    input.style.display = '';
+    input.value = display.textContent.trim();
+    input.focus();
+    input.select();
+}
+
+async function commitNameEdit(input) {
+    const cell = input.closest('.player-name-cell');
+    const display = cell.querySelector('.player-name-display');
+    const entryId = parseInt(cell.dataset.entryId);
+    const newName = input.value.trim();
+    input.style.display = 'none';
+    display.style.display = '';
+    if (!newName || newName === display.textContent.trim()) return;
+    const res = await api('/api/score/rename_entry', {entry_id: entryId, name: newName});
+    if (res.ok) {
+        display.textContent = newName;
+    } else {
+        alert(res.msg || '重命名失败');
+    }
+}
+
+// ── 快速添加选手 ──
+async function addPlayer(matchId, input) {
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    input.disabled = true;
+    const res = await api('/api/score/add_player', {match_id: matchId, player_name: name});
+    if (res.ok) {
+        appendPlayerRow(matchId, res.entry_id, name);
+        input.value = '';
+    } else {
+        alert(res.msg || '添加失败');
+    }
+    input.disabled = false;
+    input.focus();
+}
+
+function appendPlayerRow(matchId, entryId, playerName) {
+    const tbody = document.getElementById(`match-tbody-${matchId}`);
+    const table = tbody.closest('table');
+    const songCols = table.querySelectorAll('th.song-col');
+    const numSongs = songCols.length;
+    const hasExtraCol = IS_ADMIN; // 加列按钮列
+
+    // 当前行数（作为新行序号）
+    const seqNum = tbody.querySelectorAll('tr').length + 1;
+
+    let cells = '';
+    for (let i = 0; i < numSongs; i++) {
+        cells += `
+        <td class="score-cell" data-entry-id="${entryId}" data-song-idx="${i}"
+            style="text-align:center;cursor:pointer" onclick="startEdit(this)">
+            <div class="score-display">{% if current_user.is_admin %}<span class="muted add-hint">点击输入</span>{% endif %}</div>
+            <input class="score-input" type="text" value=""
+                   onblur="commitEdit(this)" onkeydown="handleScoreKey(event, this)" style="display:none">
+        </td>`;
+    }
+    if (hasExtraCol) cells += '<td></td>'; // 对应加列按钮列
+
+    const tr = document.createElement('tr');
+    tr.dataset.entryId = entryId;
+    tr.innerHTML = `
+        <td data-seq-col style="text-align:center;font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--text-muted);width:36px;">${seqNum}</td>
+        <td class="player-name-cell" data-entry-id="${entryId}" ondblclick="startNameEdit(this)" title="双击修改名称">
+            <div class="player-name-display" style="font-weight:600;font-size:0.88rem">${playerName}</div>
+            <input class="player-name-input" type="text" value="${playerName}" style="display:none;font-weight:600;font-size:0.88rem;width:100%;background:rgba(13,20,33,.9);border:1px solid var(--cyan);color:var(--text-main);border-radius:4px;padding:2px 6px;" onblur="commitNameEdit(this)" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.style.display='none';this.previousElementSibling.style.display='';}">
+        </td>
+        ${cells}
+        <td style="text-align:center"><strong class="mono cyan entry-total">0.0000%</strong></td>
+        <td style="text-align:center">
+            <select class="result-select" onchange="updateResult(${entryId}, this.value)">
+                <option value="">待定</option>
+                <option value="晋级">晋级</option>
+                <option value="候补">候补</option>
+                <option value="淘汰">淘汰</option>
+            </select>
+        </td>
+        <td><button class="icon-btn danger" onclick="deleteEntry(${entryId}, this)"><i class="bi bi-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+// ── 歌曲列：添加 / 更换 / 删除 ──
+let _songPickerCallback = null;
+let _allSongs = [];
+
+async function loadSongs(matchId) {
+    const url = matchId ? `/api/score/available_songs?match_id=${matchId}` : '/api/score/available_songs';
+    const res = await fetch(url);
+    const data = await res.json();
+    _allSongs = data.songs;
+}
+
+function renderSongList(filter = '') {
+    const list = document.getElementById('song-list');
+    const f = filter.toLowerCase();
+    const filtered = _allSongs.filter(s => s.name.toLowerCase().includes(f));
+    if (!filtered.length) {
+        list.innerHTML = '<p class="text-muted text-center" style="font-size:0.85rem">无匹配歌曲</p>';
+        return;
+    }
+    list.innerHTML = filtered.map(s => {
+        const disabled = s.banned || s.used_in_other_match;
+        const cls = s.banned ? 'banned' : (s.used_in_other_match ? 'used-other' : '');
+        const click = disabled ? '' : `onclick="pickSong(${s.id}, '${s.difficulty}')"`;
+        const tag = s.banned
+            ? '<span class="sbadge sbadge-out" style="font-size:0.65rem">已Ban</span>'
+            : (s.used_in_other_match ? '<span class="sbadge" style="background:#555;font-size:0.65rem">其他场次已用</span>' : '');
+        const cover = s.cover_url
+            ? `<img src="${s.cover_url}" alt="" class="song-item-cover">`
+            : `<div class="song-item-cover song-item-cover--ph"><i class="bi bi-music-note-beamed"></i></div>`;
+        return `<div class="song-item ${cls}" ${click}>
+            ${cover}
+            <div class="song-item-info">
+                <div class="song-item-name">${s.name}</div>
+                <div class="song-item-meta">${s.category} · ${s.rating}</div>
+            </div>
+            <span class="diff-pill diff-${s.difficulty.toLowerCase().replace(':','')}">${s.difficulty}</span>
+            ${tag}
+        </div>`;
+    }).join('');
+}
+
+function filterSongs(v) { renderSongList(v); }
+
+function closeSongPicker() {
+    document.getElementById('song-picker').style.display = 'none';
+    _songPickerCallback = null;
+}
+
+function pickSong(songId, diff) {
+    if (_songPickerCallback) _songPickerCallback(songId, diff);
+    closeSongPicker();
+}
+
+async function showSongPicker(callback, matchId) {
+    await loadSongs(matchId);
+    document.getElementById('song-search').value = '';
+    renderSongList();
+    document.getElementById('song-picker').style.display = 'block';
+    _songPickerCallback = callback;
+    setTimeout(() => document.getElementById('song-search').focus(), 50);
+}
+
+async function addSongCol(matchId) {
+    showSongPicker(async (songId, diff) => {
+        const res = await api('/api/score/set_match_song', {match_id: matchId, song_idx: -1, song_id: songId, difficulty: diff});
+        if (res.ok) location.reload();
+    }, matchId);
+}
+
+async function changeSong(matchId, songIdx, currentSongColId) {
+    showSongPicker(async (songId, diff) => {
+        const res = await api('/api/score/set_match_song', {match_id: matchId, song_idx: songIdx, song_id: songId, difficulty: diff});
+        if (res.ok) location.reload();
+    }, matchId);
+}
+
+async function removeSongCol(songColId, btn) {
+    if (!confirm('确定移除此歌曲列？该列所有成绩将一并删除。')) return;
+    const res = await api('/api/score/remove_match_song', {song_col_id: songColId});
+    if (res.ok) location.reload();
+}
+
+// ── 赛事管理 ──
+function switchTournament(tid) {
+    window.location.href = '/score?t=' + tid;
+}
+
+function showTournamentManager() {
+    document.getElementById('tournament-overlay').style.display = 'flex';
+    loadTournamentList();
+}
+
+async function loadTournamentList() {
+    const res = await fetch('/api/score/tournaments');
+    const data = await res.json();
+    const list = document.getElementById('tournament-list');
+    if (!data.tournaments || data.tournaments.length === 0) {
+        list.innerHTML = '<div class="text-center text-muted py-3" style="font-size:0.82rem;">暂无赛事，请创建一个。</div>';
+        return;
+    }
+    list.innerHTML = data.tournaments.map(t => `
+        <div class="d-flex justify-content-between align-items-center p-2 mb-2"
+             style="background:rgba(124,58,237,${t.is_active ? '0.1' : '0.03'});border:1px solid rgba(124,58,237,${t.is_active ? '0.35' : '0.12'});border-radius:8px;">
+            <div>
+                <span style="font-weight:700;color:${t.is_active ? '#a855f7' : 'var(--text-main)'};">
+                    ${t.is_active ? '★ ' : ''}${esc(t.name)}
+                </span>
+                <span class="badge ms-2" style="background:rgba(124,58,237,0.15);color:#a855f7;font-size:0.68rem;">
+                    ${t.match_count} 场
+                </span>
+            </div>
+            <div class="d-flex gap-1">
+                ${!t.is_active ? `<button class="btn btn-sm px-2" style="font-size:0.72rem;background:rgba(124,58,237,0.15);color:#a855f7;border-color:rgba(124,58,237,0.3);"
+                    onclick="activateTournament(${t.id})"><i class="bi bi-star me-1"></i>设为活跃</button>` : ''}
+                <button class="btn btn-sm px-2" style="font-size:0.72rem;color:var(--text-muted);"
+                    onclick="renameTournament(${t.id}, this)"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm px-2" style="font-size:0.72rem;color:var(--pink);"
+                    onclick="deleteTournament(${t.id}, '${esc(t.name)}')"><i class="bi bi-trash"></i></button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function addTournament() {
+    const input = document.getElementById('new-tournament-name');
+    const name = input.value.trim();
+    if (!name) return;
+    const res = await api('/api/score/add_tournament', {name});
+    if (res.ok) {
+        input.value = '';
+        loadTournamentList();
+        // 切换到新赛事
+        window.location.href = '/score?t=' + res.tournament_id;
+    }
+}
+
+async function activateTournament(tid) {
+    const res = await api('/api/score/switch_tournament', {tournament_id: tid});
+    if (res.ok) window.location.href = '/score?t=' + tid;
+}
+
+function renameTournament(tid, btn) {
+    const row = btn.closest('.d-flex');
+    const nameEl = row.querySelector('span[style*="font-weight"]');
+    const old = nameEl.textContent.replace('★ ', '').trim();
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = old; input.maxLength = 200;
+    input.className = 'form-control form-control-sm';
+    input.style.cssText = 'width:160px;display:inline;';
+    nameEl.innerHTML = '';
+    nameEl.appendChild(input);
+    input.focus(); input.select();
+    async function done() {
+        const newName = input.value.trim() || old;
+        await api('/api/score/rename_tournament', {tournament_id: tid, name: newName});
+        loadTournamentList();
+    }
+    input.onblur = done;
+    input.onkeydown = e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = old; input.blur(); } };
+}
+
+async function deleteTournament(tid, name) {
+    if (!confirm(`确定删除赛事「${name}」及其所有 Match 数据？此操作不可撤销。`)) return;
+    const res = await api('/api/score/delete_tournament', {tournament_id: tid});
+    if (res.ok) {
+        loadTournamentList();
+        // 如果删除的是当前查看的赛事，返回默认页
+        const sel = document.getElementById('tournament-select');
+        if (sel) {
+            const currentTid = parseInt(sel.value);
+            if (currentTid === tid) window.location.href = '/score';
+        }
+    }
+}
+
+// ── 新增 Match ──
+function showAddMatch() {
+    document.getElementById('add-match-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('new-match-name').focus(), 50);
+}
+async function confirmAddMatch() {
+    const name = document.getElementById('new-match-name').value.trim();
+    if (!name) return;
+    const sel = document.getElementById('tournament-select');
+    const body = {name};
+    if (sel) body.tournament_id = parseInt(sel.value);
+    const res = await api('/api/score/add_match', body);
+    if (res.ok) location.reload();
+}
+
+// ── 重命名 Match ──
+function renameMatch(matchId, el) {
+    const old = el.textContent.replace('🎵 ', '').trim();
+    const input = document.createElement('input');
+    input.value = old;
+    input.style.cssText = 'background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:4px;padding:2px 8px;font-size:0.95rem;font-family:Rajdhani,sans-serif;font-weight:700;min-width:120px;';
+    el.innerHTML = '';
+    el.appendChild(input);
+    input.focus(); input.select();
+    async function done() {
+        const newName = input.value.trim() || old;
+        const res = await api('/api/score/rename_match', {match_id: matchId, name: newName});
+        el.textContent = '🎵 ' + (res.ok ? newName : old);
+    }
+    input.onblur = done;
+    input.onkeydown = e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.value = old; input.blur(); } };
+}
+
+// ── 删除 Match ──
+async function deleteMatch(matchId, btn) {
+    if (!confirm('确定删除整个 Match？所有选手成绩将一并删除。')) return;
+    const res = await api('/api/score/delete_match', {match_id: matchId});
+    if (res.ok) document.getElementById(`match-block-${matchId}`)?.remove();
+}
+
+// ── 自动晋级 ──
+function showAutoResult(matchId) {
+    const overlay = document.getElementById('auto-result-overlay');
+    overlay.dataset.matchId = matchId;
+    overlay.style.display = 'flex';
+}
+async function confirmAutoResult() {
+    const overlay = document.getElementById('auto-result-overlay');
+    const matchId = parseInt(overlay.dataset.matchId);
+    const advance = parseInt(document.getElementById('advance-count').value) || 1;
+    const wait    = parseInt(document.getElementById('wait-count').value) || 0;
+    const res = await api('/api/score/auto_result', {match_id: matchId, advance_count: advance, wait_count: wait});
+    if (res.ok) {
+        overlay.style.display = 'none';
+        // 更新页面上的判定
+        Object.entries(res.results).forEach(([id, result]) => {
+            const row = document.querySelector(`[data-entry-id="${id}"]`);
+            if (row) {
+                const sel = row.querySelector('.result-select');
+                if (sel) sel.value = result;
+            }
+        });
+    }
+}
+
+// ── 验证码 ──
+function showVerify() { document.getElementById('verify-overlay').style.display = 'flex'; }
+
+
+
+// ── ESC 关闭所有浮层 ──
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.quick-overlay').forEach(el => el.style.display = 'none');
+        closeSongPicker();
+    }
+});
+
+// ── SSE 实时更新 ──
+(function startSSE() {
+    const es = new EventSource('/api/sse/score');
+    es.onmessage = function(e) {
+        const d = JSON.parse(e.data);
+        if (d.type === 'connected') return;
+        if (d.type === 'cell') {
+            const cell = document.querySelector(`.score-cell[data-entry-id="${d.entry_id}"][data-song-idx="${d.song_idx}"]`);
+            if (!cell) return;
+            const display = cell.querySelector('.score-display');
+            if (!display) return;
+            const input = cell.querySelector('.score-input');
+            if (input && input.style.display !== 'none') return;
+            if (d.value) {
+                const imgHtml = d.rank_key
+                    ? `<img src="/static/mai/pic/UI_TTR_Rank_${d.rank_key}.png" class="rank-img" alt="${d.rank_key}">`
+                    : '';
+                display.innerHTML = `<div class="mono" style="font-size:0.82rem">${d.value}</div><div class="mt-1">${imgHtml}</div>`;
+            } else {
+                display.innerHTML = IS_ADMIN ? '<span class="muted add-hint">点击输入</span>' : '';
+            }
+            const totalCell = cell.closest('tr') && cell.closest('tr').querySelector('.entry-total');
+            if (totalCell && d.total) totalCell.textContent = d.total;
+        }
+        if (d.type === 'result') {
+            const row = document.querySelector(`tr[data-entry-id="${d.result_entry_id || d.entry_id}"]`);
+            if (!row) return;
+            const sel = row.querySelector('.result-select');
+            if (sel) sel.value = d.result;
+            const bc = row.querySelector('.result-badge-cell');
+            if (bc) bc.innerHTML = statusBadge(d.result);
+        }
+    };
+    es.onerror = function() { es.close(); setTimeout(startSSE, 3000); };
+})();
+
+// ── 导出 Excel（每个 Match 一个工作表） ──
+function exportToExcel() {
+    if (typeof XLSX !== 'undefined') { doExport(); return; }
+    const cdnList = [
+        'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+    ];
+    function tryLoad(idx) {
+        if (idx >= cdnList.length) { alert('SheetJS 库加载失败，请检查网络后重试。'); return; }
+        const s = document.createElement('script');
+        s.src = cdnList[idx];
+        s.onload = () => doExport();
+        s.onerror = () => tryLoad(idx + 1);
+        document.head.appendChild(s);
+    }
+    tryLoad(0);
+}
+
+function doExport() {
+    try {
+        const wb = XLSX.utils.book_new();
+        let sheetIndex = 0;
+
+        document.querySelectorAll('.match-table').forEach(table => {
+            sheetIndex++;
+            const matchId = table.dataset.matchId;
+            const titleEl = document.querySelector(`.match-title[data-match-id="${matchId}"]`);
+            let rawName = titleEl ? titleEl.textContent.trim() : `Match${matchId}`;
+            // 去除表情符号和 Excel 非法字符
+            let sheetName = rawName
+                .replace(/[\uD800-\uDFFF]|[\u{1F000}-\u{1FFFF}]/gu, '')
+                .replace(/[\\\/\?\*\[\]\:\']/g, '')
+                .replace(/\s+/g, ' ').trim() || `场次${sheetIndex}`;
+            sheetName = sheetName.substring(0, 31);
+
+            const headers = [];
+            table.querySelectorAll('thead th').forEach(th => {
+                const songTitle = th.querySelector('.song-title-text');
+                if (songTitle) { headers.push(songTitle.textContent.trim()); return; }
+                if (th.querySelector('button') && !th.textContent.trim()) return;
+                const txt = th.textContent.trim();
+                // 跳过序号列表头（"#"）
+                if (txt === '#') return;
+                if (txt) headers.push(txt);
+            });
+
+            const rows = [headers];
+            table.querySelectorAll('tbody tr').forEach(tr => {
+                const row = [];
+                tr.querySelectorAll('td').forEach(td => {
+                    // 跳过序号列
+                    if (td.hasAttribute('data-seq-col')) return;
+                    if (td.querySelector('button') && !td.querySelector('.score-display')) return;
+                    const scoreDisplay = td.querySelector('.score-display');
+                    if (scoreDisplay) {
+                        const mono = scoreDisplay.querySelector('.mono');
+                        row.push(mono ? mono.textContent.trim() : '');
+                    } else if (td.querySelector('.result-select')) {
+                        row.push(td.querySelector('.result-select').value || '待定');
+                    } else if (td.querySelector('.sbadge')) {
+                        row.push(td.querySelector('.sbadge').textContent.trim());
+                    } else {
+                        const txt = td.textContent.trim();
+                        if (txt) row.push(txt);
+                    }
+                });
+                if (row.length > 0) rows.push(row);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            if (headers.length > 0) {
+                ws['!cols'] = headers.map((_, i) => ({
+                    wch: Math.min(30, Math.max(10, ...rows.map(r => String(r[i] ?? '').length)))
+                }));
+            }
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        });
+
+        if (wb.SheetNames.length === 0) { alert('没有可导出的数据，请先添加 Match 和成绩。'); return; }
+
+        const now = new Date();
+        const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+        XLSX.writeFile(wb, `舞萌赛事计分_${ts}.xlsx`);
+    } catch(err) {
+        console.error('导出失败:', err);
+        alert('导出失败：' + err.message);
+    }
+}
+
+// ══════════════════════════════════════════════════
+// 批量分组生成 Match
+// ══════════════════════════════════════════════════
+let _batchGroups = [];
+let _batchPool   = [];
+
+function showBatchMatch() {
+    batchUpdateSource();
+    document.getElementById('batch-match-overlay').style.display = 'flex';
+}
+
+function batchUpdateSource() {
+    const sel = document.getElementById('batch-source-match');
+    const advOnly = document.getElementById('batch-advanced-only').checked;
+
+    let players = [];
+    if (sel.value === '__all__') {
+        const seen = new Set();
+        ALL_MATCHES_DATA.forEach(m => m.players.forEach(p => { if (!seen.has(p)) { seen.add(p); players.push(p); } }));
+    } else {
+        const idx = parseInt(sel.value);
+        const m = ALL_MATCHES_DATA[idx];
+        if (m) players = [...m.players];
+    }
+
+    if (advOnly) {
+        const advancedSet = new Set();
+        document.querySelectorAll('.result-select').forEach(s => {
+            if (s.value === '晋级') {
+                const nameEl = s.closest('tr')?.querySelector('td div[style*="font-weight:600"]');
+                if (nameEl) advancedSet.add(nameEl.textContent.trim());
+            }
+        });
+        players = players.filter(p => advancedSet.has(p));
+    }
+
+    _batchPool = players;
+    const poolEl = document.getElementById('batch-player-pool');
+    poolEl.innerHTML = players.length
+        ? players.map(p => `<span class="batch-pool-chip">${p}</span>`).join('')
+        : '<span style="font-size:0.78rem;color:var(--text-muted);">无可用选手</span>';
+
+    batchShuffle();
+}
+
+function batchShuffle() {
+    const matchCount = Math.max(1, parseInt(document.getElementById('batch-match-count').value) || 4);
+    const groupSize  = Math.max(1, parseInt(document.getElementById('batch-group-size').value) || 4);
+
+    // Fisher-Yates shuffle
+    const pool = [..._batchPool];
+    for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    // 蛇形轮询分配
+    _batchGroups = Array.from({length: matchCount}, () => []);
+    let dir = 1, gi = 0;
+    pool.forEach(p => {
+        if (_batchGroups[gi].length < groupSize) _batchGroups[gi].push(p);
+        gi += dir;
+        if (gi >= matchCount) { gi = matchCount - 1; dir = -1; }
+        if (gi < 0)           { gi = 0;               dir = 1;  }
+    });
+
+    batchRenderPreview();
+}
+
+function batchPreview() {
+    // 输入框改变时重新切割（保留已洗牌顺序）
+    const matchCount = Math.max(1, parseInt(document.getElementById('batch-match-count').value) || 4);
+    const groupSize  = Math.max(1, parseInt(document.getElementById('batch-group-size').value) || 4);
+    const pool = _batchGroups.flat();
+    _batchGroups = Array.from({length: matchCount}, () => []);
+    let dir = 1, gi = 0;
+    pool.forEach(p => {
+        if (_batchGroups[gi].length < groupSize) _batchGroups[gi].push(p);
+        gi += dir;
+        if (gi >= matchCount) { gi = matchCount - 1; dir = -1; }
+        if (gi < 0)           { gi = 0;               dir = 1;  }
+    });
+    batchRenderPreview();
+}
+
+function batchRenderPreview() {
+    const prefix = document.getElementById('batch-name-prefix').value.trim() || 'Match';
+    const grid = document.getElementById('batch-preview');
+    const pool = _batchGroups.flat();
+    if (!pool.length) {
+        grid.innerHTML = '<p style="font-size:0.82rem;color:var(--text-muted);">暂无选手可分组</p>';
+        return;
+    }
+    const groupColors = ['#a855f7','#06d6a0','#00dcff','#ffd166','#ff2d78','#f97316','#8b5cf6','#22c55e',
+                         '#ec4899','#14b8a6','#f59e0b','#3b82f6'];
+    const chineseNums = ['一','二','三','四','五','六','七','八','九','十',
+        '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十'];
+
+    grid.innerHTML = _batchGroups.map((group, gi) => {
+        if (!group.length) return '';
+        const color = groupColors[gi % groupColors.length];
+        const label = `${prefix}第${chineseNums[gi] || (gi+1)}组`;
+        return `<div class="batch-group-card">
+            <div class="batch-group-card__header" style="background:${color}22;color:${color};">
+                🎵 ${label}
+            </div>
+            <div class="batch-group-card__body">
+                ${group.map((p, pi) => `<div class="batch-group-player">
+                    <span class="batch-player-num">${pi+1}.</span>
+                    <span>${p}</span>
+                </div>`).join('')}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function confirmBatchMatch() {
+    const prefix = document.getElementById('batch-name-prefix').value.trim() || 'Match';
+    const groups = _batchGroups.filter(g => g.length > 0);
+    if (!groups.length) { alert('没有可创建的分组'); return; }
+
+    const btn = document.querySelector('#batch-match-overlay .btn-warning');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>创建中…';
+
+    const chineseNums = ['一','二','三','四','五','六','七','八','九','十',
+        '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十'];
+    let created = 0;
+
+    for (let gi = 0; gi < groups.length; gi++) {
+        const name = `${prefix}第${chineseNums[gi] || (gi+1)}组`;
+        try {
+            const res = await api('/api/score/add_match', {name});
+            if (!res.ok) continue;
+            created++;
+            for (const playerName of groups[gi]) {
+                try { await api('/api/score/add_player', {match_id: res.match_id, player_name: playerName}); } catch(e) {}
+            }
+        } catch(e) {}
+    }
+
+    if (created > 0) {
+        document.getElementById('batch-match-overlay').style.display = 'none';
+        location.reload();
+    } else {
+        alert('创建失败，请刷新后重试');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>创建所有 Match';
+    }
+}
+</script>
+{% endblock %}

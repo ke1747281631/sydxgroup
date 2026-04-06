@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2><i class="bi bi-clipboard-check me-2"></i>审核：{{ assignment.title }}</h2>
+
+{% if assignment.description %}
+<div class="alert alert-info" style="font-size:0.85rem;">
+    {{ assignment.description | nl2br }}
+</div>
+{% endif %}
+
+<div class="mb-3">
+    <span class="badge bg-secondary">共 {{ submissions | length }} 份提交</span>
+    {% set pending = submissions | selectattr('status', 'equalto', 'pending') | list %}
+    {% set approved = submissions | selectattr('status', 'equalto', 'approved') | list %}
+    {% set rejected = submissions | selectattr('status', 'equalto', 'rejected') | list %}
+    <span class="badge bg-warning text-dark">待审核 {{ pending | length }}</span>
+    <span class="badge bg-success">已通过 {{ approved | length }}</span>
+    <span class="badge bg-danger">已驳回 {{ rejected | length }}</span>
+</div>
+
+{% if not submissions %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>暂无提交记录。
+</div>
+{% endif %}
+
+{% for sub in submissions %}
+<div class="card mb-3" style="border-left:3px solid {% if sub.status == 'approved' %}var(--green){% elif sub.status == 'rejected' %}var(--pink){% else %}var(--gold){% endif %};">
+    <div class="card-body">
+        <div class="row">
+            {# 用户信息和成绩 #}
+            <div class="col-md-3">
+                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">提交者</div>
+                <div style="font-weight:700;font-size:1.1rem;">{{ sub.user.username }}</div>
+                <div class="mt-2" style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">成绩</div>
+                <div style="font-size:1.5rem;font-weight:700;color:var(--gold);font-family:'Space Mono',monospace;">{{ sub.score }}</div>
+                <div class="mt-2">
+                    {% if sub.status == 'pending' %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>待审核</span>
+                    {% elif sub.status == 'approved' %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>已通过</span>
+                    {% elif sub.status == 'rejected' %}
+                    <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>已驳回</span>
+                    {% endif %}
+                </div>
+                <div class="mt-1" style="font-size:0.7rem;color:var(--text-muted);font-family:'Space Mono',monospace;">
+                    {{ sub.created_at.strftime('%Y-%m-%d %H:%M') }}
+                </div>
+            </div>
+
+            {# 截图 #}
+            <div class="col-md-4">
+                {% if sub.image_path %}
+                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">成绩截图</div>
+                <a href="{{ url_for('static', filename=sub.image_path) }}" target="_blank">
+                    <img src="{{ url_for('static', filename=sub.image_path) }}"
+                         style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid var(--border);"
+                         alt="成绩截图">
+                </a>
+                {% else %}
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:1rem;">
+                    <i class="bi bi-image me-1"></i>未上传截图
+                </div>
+                {% endif %}
+            </div>
+
+            {# 操作区 #}
+            <div class="col-md-5">
+                {# 修改成绩 #}
+                <form method="POST" action="{{ url_for('admin_submission_edit', sid=sub.id) }}" class="mb-2">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-5">
+                            <label class="form-label" style="font-size:0.7rem;">修改成绩</label>
+                            <input type="text" name="score" class="form-control form-control-sm"
+                                   value="{{ sub.score }}" maxlength="50">
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label" style="font-size:0.7rem;">备注</label>
+                            <input type="text" name="comment" class="form-control form-control-sm"
+                                   value="{{ sub.admin_comment or '' }}" maxlength="500" placeholder="可选备注">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-warning btn-sm mt-2">
+                        <i class="bi bi-pencil me-1"></i>保存修改
+                    </button>
+                </form>
+
+                <div class="d-flex gap-2 mt-2">
+                    {# 通过 #}
+                    <form method="POST" action="{{ url_for('admin_submission_approve', sid=sub.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="comment" value="{{ sub.admin_comment or '' }}">
+                        <button type="submit" class="btn btn-success btn-sm"
+                                {% if sub.status == 'approved' %}disabled{% endif %}>
+                            <i class="bi bi-check-lg me-1"></i>通过
+                        </button>
+                    </form>
+
+                    {# 驳回 #}
+                    <form method="POST" action="{{ url_for('admin_submission_reject', sid=sub.id) }}">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="comment" value="{{ sub.admin_comment or '' }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm"
+                                {% if sub.status == 'rejected' %}disabled{% endif %}>
+                            <i class="bi bi-x-lg me-1"></i>驳回
+                        </button>
+                    </form>
+
+                    {# 删除 #}
+                    <form method="POST" action="{{ url_for('admin_submission_delete', sid=sub.id) }}"
+                          onsubmit="return confirm('确定删除此提交记录？')">
+                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger btn-sm">
+                            <i class="bi bi-trash me-1"></i>删除
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<div class="mt-3">
+    <a href="{{ url_for('admin_assignments') }}" class="btn btn-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>返回课题列表
+    </a>
+</div>
+
+{% endblock %}

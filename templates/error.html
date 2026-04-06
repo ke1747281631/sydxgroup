@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center" style="margin-top: 5rem;">
+    <div class="col-md-6 text-center">
+        <div style="font-size: 5rem; font-family: 'Rajdhani', sans-serif; font-weight: 700;
+                    color: var(--pink); text-shadow: var(--glow-pink); line-height: 1;">
+            {{ code }}
+        </div>
+        <h2 class="mt-3">
+            {% if code == 400 %}请求无效
+            {% elif code == 403 %}禁止访问
+            {% elif code == 404 %}页面未找到
+            {% elif code == 429 %}请求过于频繁
+            {% else %}发生错误
+            {% endif %}
+        </h2>
+        <p class="text-muted mt-2" style="font-size: 0.95rem;">{{ message }}</p>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-primary mt-3">
+            <i class="bi bi-house me-1"></i>返回首页
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block content %}
+<h2><i class="bi bi-hand-index-thumb me-2"></i>投票</h2>
+<p class="text-muted mb-4" style="font-size:0.85rem;letter-spacing:1px;">VOTING — 选择你支持的选项</p>
+
+{% if topics_data %}
+<div class="d-flex flex-column gap-4">
+{% for td in topics_data %}
+{% set is_multi = td.topic.vote_type == 'multi' %}
+<div class="vote-card">
+    <div class="vote-card__header">
+        <div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="vote-card__title">{{ td.topic.title }}</span>
+                <span class="type-badge {% if is_multi %}multi{% endif %}">
+                    <i class="bi bi-{% if is_multi %}check2-square{% else %}record-circle{% endif %} me-1"></i>
+                    {% if is_multi %}多选{% else %}单选{% endif %}
+                </span>
+            </div>
+            {% if td.topic.description %}
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">{{ td.topic.description }}</div>
+            {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--text-muted);">
+                截止 {{ td.topic.end_date.strftime('%m/%d') }}
+            </span>
+            <span class="vote-total-badge" data-topic-id="{{ td.topic.id }}">{{ td.total }} 票</span>
+        </div>
+    </div>
+
+    <div class="vote-card__body">
+        {% if not td.topic.options %}
+        <p class="text-muted" style="font-size:0.85rem;">暂无选项</p>
+        {% elif not td.has_voted %}
+        {# 未投票：纯选项，无进度条 #}
+        <form class="vote-form" data-topic-id="{{ td.topic.id }}" data-multi="{{ 'true' if is_multi else 'false' }}">
+            <div class="d-flex flex-column gap-2" id="options-{{ td.topic.id }}">
+            {% for od in td.options %}
+            <div class="vote-option selectable" data-option-id="{{ od.option.id }}" onclick="toggleOption(this)">
+                <div class="vote-option__content">
+                    <span class="vote-option__name">
+                        {% if is_multi %}
+                        <span class="check-box"><i class="bi bi-check2" style="display:none"></i></span>
+                        {% else %}
+                        <span class="radio-dot"></span>
+                        {% endif %}
+                        {{ od.option.title }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+            </div>
+            <div class="mt-3 d-flex justify-content-end">
+                <button type="button" class="btn btn-primary btn-sm px-4" onclick="submitVote(this)">
+                    <i class="bi bi-check2 me-1"></i>确认投票
+                </button>
+            </div>
+        </form>
+        {% else %}
+        {# 已投票：显示结果和进度条 #}
+        <div class="vote-result d-flex flex-column gap-2" data-topic-id="{{ td.topic.id }}">
+        {% for od in td.options %}
+        {% set opted = od.option.id in td.user_voted_ids %}
+        {% set pct = ((od.count / td.total * 100) | round(1)) if td.total > 0 else 0 %}
+        <div class="vote-option result {% if opted %}voted{% endif %}" data-option-id="{{ od.option.id }}">
+            <div class="vote-option__bar" style="width:{{ pct }}%"></div>
+            <div class="vote-option__content">
+                <span class="vote-option__name">
+                    {% if is_multi %}
+                    <span class="check-box {% if opted %}checked{% endif %}">{% if opted %}<i class="bi bi-check2"></i>{% endif %}</span>
+                    {% else %}
+                    <span class="radio-dot {% if opted %}checked{% endif %}"></span>
+                    {% endif %}
+                    {{ od.option.title }}
+                </span>
+                <span class="vote-option__meta">{{ od.count }} 票 · {{ pct }}%</span>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        <div class="mt-2" style="font-size:0.78rem;color:var(--green);">
+            <i class="bi bi-check-circle me-1"></i>已完成投票
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card text-center py-5">
+    <i class="bi bi-hand-thumbs-up" style="font-size:2.5rem;color:var(--text-muted);"></i>
+    <p class="text-muted mt-3 mb-0">当前没有进行中的投票活动</p>
+</div>
+{% endif %}
+
+<style>
+.vote-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.vote-card__header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; padding:14px 18px; background:rgba(0,220,255,0.05); border-bottom:1px solid var(--border); }
+.vote-card__title { font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1.05rem; color:var(--text-main); letter-spacing:0.5px; }
+.vote-total-badge { font-family:'Space Mono',monospace; font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(0,220,255,0.1); color:var(--cyan); border:1px solid rgba(0,220,255,0.2); }
+.vote-card__body { padding:16px 18px; }
+
+.vote-option { position:relative; display:block; border:1px solid var(--border); border-radius:7px; overflow:hidden; background:rgba(255,255,255,0.02); transition:border-color .15s; }
+.vote-option.selectable { cursor:pointer; }
+.vote-option.selectable:hover { border-color:rgba(0,220,255,0.4); }
+.vote-option.selectable.selected { border-color:var(--cyan); background:rgba(0,220,255,0.06); }
+.vote-option.result.voted { border-color:var(--green); }
+
+.vote-option__bar { position:absolute; left:0; top:0; bottom:0; background:rgba(0,220,255,0.08); pointer-events:none; transition:width .5s ease; }
+.vote-option.voted .vote-option__bar { background:rgba(6,214,160,0.12); }
+.vote-option__content { position:relative; display:flex; justify-content:space-between; align-items:center; padding:10px 14px; gap:8px; }
+.vote-option__name { font-size:0.9rem; color:var(--text-main); font-weight:500; display:flex; align-items:center; gap:9px; }
+.vote-option__meta { font-family:'Space Mono',monospace; font-size:0.72rem; color:var(--text-muted); white-space:nowrap; }
+
+.radio-dot { width:14px; height:14px; flex-shrink:0; border-radius:50%; border:2px solid var(--border); background:transparent; transition:all .15s; position:relative; }
+.radio-dot::after { content:''; position:absolute; inset:2px; border-radius:50%; background:transparent; transition:background .15s; }
+.vote-option.selectable.selected .radio-dot, .radio-dot.checked { border-color:var(--cyan); }
+.vote-option.selectable.selected .radio-dot::after { background:var(--cyan); }
+.radio-dot.checked { border-color:var(--green); }
+.radio-dot.checked::after { background:var(--green); }
+
+.check-box { width:14px; height:14px; flex-shrink:0; border-radius:3px; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:900; transition:all .15s; }
+.vote-option.selectable.selected .check-box { border-color:var(--cyan); background:var(--cyan); color:#070b12; }
+.vote-option.selectable.selected .check-box i { display:block !important; }
+.check-box.checked { border-color:var(--green); background:var(--green); color:#070b12; }
+</style>
+
+<script>
+function toggleOption(el) {
+    const container = el.closest('[data-multi]');
+    const isMulti = container && container.dataset.multi === 'true';
+    if (isMulti) {
+        el.classList.toggle('selected');
+    } else {
+        el.parentElement.querySelectorAll('.vote-option.selectable').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+}
+
+function submitVote(btn) {
+    const form = btn.closest('.vote-form');
+    const isMulti = form.dataset.multi === 'true';
+    const selected = [...form.querySelectorAll('.vote-option.selectable.selected')];
+    if (!selected.length) { alert(isMulti ? '请至少选择一个选项' : '请选择一个选项'); return; }
+    const realForm = document.createElement('form');
+    realForm.method = 'POST';
+    realForm.action = window.location.pathname;
+    selected.forEach(el => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = isMulti ? 'option_ids' : 'option_id';
+        inp.value = el.dataset.optionId;
+        realForm.appendChild(inp);
+    });
+    document.body.appendChild(realForm);
+    realForm.submit();
+}
+
+// SSE 实时更新投票结果
+(function startVoteSSE() {
+    const es = new EventSource('/api/sse/vote');
+    es.onmessage = function(e) {
+        const d = JSON.parse(e.data);
+        if (d.type !== 'update') return;
+        const badge = document.querySelector(`.vote-total-badge[data-topic-id="${d.topic_id}"]`);
+        if (badge) badge.textContent = d.total + ' 票';
+        document.querySelectorAll(`.vote-result[data-topic-id="${d.topic_id}"] .vote-option.result`).forEach(row => {
+            const cnt = d.counts[row.dataset.optionId] ?? 0;
+            const pct = d.total > 0 ? (cnt / d.total * 100).toFixed(1) : '0.0';
+            const bar = row.querySelector('.vote-option__bar');
+            if (bar) bar.style.width = pct + '%';
+            const meta = row.querySelector('.vote-option__meta');
+            if (meta) meta.textContent = cnt + ' 票 · ' + pct + '%';
+        });
+    };
+    es.onerror = function() { es.close(); setTimeout(startVoteSSE, 3000); };
+})();
+</script>
+{% endblock %}

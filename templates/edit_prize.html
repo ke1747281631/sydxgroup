@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="d-flex align-items-center gap-2 mb-4">
+            <a href="{{ url_for('prize_pool') }}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <h2 class="mb-0"><i class="bi bi-pencil-square me-2"></i>编辑奖品</h2>
+        </div>
+        <div class="card p-4">
+            <form method="post">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label>提供者</label>
+                        <input type="text" name="provider" class="form-control" value="{{ prize.provider }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label>奖品名称</label>
+                        <input type="text" name="prize" class="form-control" value="{{ prize.prize }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label>数量</label>
+                        <input type="number" name="quantity" class="form-control" min="1" value="{{ prize.quantity }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label>抽选条件</label>
+                        <input type="text" name="condition" class="form-control" value="{{ prize.condition or '' }}" placeholder="可选">
+                    </div>
+                    <div class="col-12">
+                        <label>获奖者（可选，手动填写）</label>
+                        <input type="text" name="winner" class="form-control" value="{{ prize.winner or '' }}" placeholder="留空则待抽奖">
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy me-1"></i>保存更改
+                    </button>
+                    <a href="{{ url_for('prize_pool') }}" class="btn btn-secondary">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

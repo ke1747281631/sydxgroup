@@ -1,0 +1,572 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-gear me-2"></i>系统设置</h2>
+    <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">ADMIN SETTINGS</p>
+</div>
+
+<form method="post" action="{{ url_for('admin_settings') }}">
+<input type="hidden" name="save_settings" value="1">
+
+<!-- ══ 基础参数 ══ -->
+<div class="settings-card mb-4">
+    <div class="settings-card__header">
+        <i class="bi bi-sliders me-2"></i>基础参数
+    </div>
+    <div class="settings-card__body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="field-label">最大选曲数量</label>
+                <input type="number" name="max_song_selection" class="form-control form-control-sm"
+                       value="{{ config.max_song_selection }}" min="1" max="100">
+            </div>
+            <div class="col-md-4">
+                <label class="field-label">每人最大 Ban 数</label>
+                <input type="number" name="max_ban_per_user" class="form-control form-control-sm"
+                       value="{{ config.max_ban_per_user }}" min="0" max="20">
+            </div>
+            <div class="col-md-4">
+                <label class="field-label">计分表验证码</label>
+                <input type="text" name="score_code" class="form-control form-control-sm"
+                       value="{{ config.score_code }}" placeholder="留空则无需验证">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 功能开放时间 ══ -->
+{% if features is defined %}
+<div class="settings-card mb-4">
+    <div class="settings-card__header">
+        <i class="bi bi-clock me-2"></i>功能开放时间
+        <span class="header-hint">留空 = 不限制 &nbsp;·&nbsp; 管理员始终可访问</span>
+    </div>
+    <div class="settings-card__body">
+        {% set feat_icons = {
+            'vote':        'bi-hand-thumbs-up',
+            'select_song': 'bi-music-note-list',
+            'ban_song':    'bi-slash-circle',
+            'score':       'bi-table',
+            'prize_pool':  'bi-gift',
+            'lottery':     'bi-dice-5'
+        } %}
+
+        <div class="time-grid">
+        {% for feat in features %}
+        {% set label    = feature_labels[feat] %}
+        {% set icon     = feat_icons.get(feat, 'bi-clock') %}
+        {% set open_key  = 'feature_' ~ feat ~ '_open_time' %}
+        {% set close_key = 'feature_' ~ feat ~ '_close_time' %}
+        {% set open_val  = feature_times.get(open_key,  '') %}
+        {% set close_val = feature_times.get(close_key, '') %}
+
+        <div class="time-row">
+            <div class="time-row__label">
+                <i class="bi {{ icon }} me-2" style="color:var(--cyan);"></i>{{ label }}
+            </div>
+            <!-- 模块开关 -->
+            <label class="module-toggle" title="开启/关闭此模块（普通用户可见性）">
+                <input type="checkbox" name="feature_{{ feat }}_enabled" value="1"
+                       {% if feature_enabled.get(feat, True) %}checked{% endif %}>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                <span class="toggle-label">开启</span>
+            </label>
+            <div class="time-row__fields">
+                <div class="time-field">
+                    <span class="time-field__badge open">开放</span>
+                    <input type="datetime-local" class="time-input"
+                           name="{{ open_key }}" value="{{ open_val }}">
+                </div>
+                <div class="time-sep"><i class="bi bi-arrow-right"></i></div>
+                <div class="time-field">
+                    <span class="time-field__badge close">关闭</span>
+                    <input type="datetime-local" class="time-input"
+                           name="{{ close_key }}" value="{{ close_val }}">
+                </div>
+                <button type="button" class="btn-clear-time"
+                        onclick="clearTimes(this)" title="清除时间限制">
+                    <i class="bi bi-x-circle"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+
+        <div class="mt-3" style="font-size:0.78rem;color:var(--text-muted);">
+            <i class="bi bi-clock-history me-1"></i>
+            当前时间：<span id="server-time"
+                style="font-family:'Space Mono',monospace;color:var(--cyan);">--</span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ══ Ban 曲显示选项 ══ -->
+<div class="settings-card mb-4">
+    <div class="settings-card__header">
+        <i class="bi bi-eye me-2"></i>Ban 曲信息显示
+        <span class="header-hint">控制普通用户在 Ban 曲界面能看到的信息</span>
+    </div>
+    <div class="settings-card__body">
+        <div class="d-flex flex-column gap-3">
+            <label class="toggle-row">
+                <div class="toggle-row__info">
+                    <span class="toggle-row__label"><i class="bi bi-person-lines-fill me-2" style="color:var(--cyan);"></i>显示选曲人</span>
+                    <span class="toggle-row__desc">普通用户可以看到每首歌的选曲人是谁</span>
+                </div>
+                <label class="module-toggle">
+                    <input type="checkbox" name="show_selector_info" value="1"
+                           {% if show_selector_info %}checked{% endif %}>
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">开启</span>
+                </label>
+            </label>
+            <label class="toggle-row">
+                <div class="toggle-row__info">
+                    <span class="toggle-row__label"><i class="bi bi-slash-circle me-2" style="color:var(--pink);"></i>显示 Ban 曲人</span>
+                    <span class="toggle-row__desc">普通用户可以看到每首 Ban 掉的歌是谁操作的</span>
+                </div>
+                <label class="module-toggle">
+                    <input type="checkbox" name="show_ban_by" value="1"
+                           {% if show_ban_by %}checked{% endif %}>
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">开启</span>
+                </label>
+            </label>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-end mb-5">
+    <button type="submit" class="btn btn-primary px-4">
+        <i class="bi bi-check2 me-2"></i>保存设置
+    </button>
+</div>
+</form>
+
+<!-- ══ 邀请码管理 ══ -->
+<div class="settings-card mb-4">
+    <div class="settings-card__header">
+        <i class="bi bi-key me-2"></i>邀请码管理
+    </div>
+    <div class="settings-card__body">
+        <form method="post" action="{{ url_for('admin_settings') }}" class="mb-4">
+            <input type="hidden" name="generate_invite" value="1">
+            <div class="row g-2 mb-2">
+                <div class="col-sm-4">
+                    <label class="field-label">邀请码（留空自动生成）</label>
+                    <input type="text" name="invite_code" class="form-control form-control-sm"
+                           placeholder="留空自动生成">
+                </div>
+                <div class="col-sm-2">
+                    <label class="field-label">剩余次数（-1=无限）</label>
+                    <input type="text" name="remaining_uses" class="form-control form-control-sm"
+                           value="1">
+                </div>
+                <div class="col-sm-4">
+                    <label class="field-label">备注</label>
+                    <input type="text" name="remark" class="form-control form-control-sm"
+                           placeholder="可选备注">
+                </div>
+                <div class="col-sm-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-success btn-sm w-100">
+                        <i class="bi bi-plus-circle me-1"></i>生成
+                    </button>
+                </div>
+            </div>
+            <!-- 管理员码：原生 checkbox，CSS 自定义外观 -->
+            <div class="d-flex align-items-center gap-3 p-2"
+                 style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:7px;">
+                <label for="grants_admin_cb"
+                       style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;margin:0;">
+                    <input type="checkbox" name="grants_admin" id="grants_admin_cb" value="on"
+                           style="width:16px;height:16px;accent-color:#ff2d78;cursor:pointer;flex-shrink:0;">
+                    <span style="font-size:0.85rem;font-weight:600;font-family:'Rajdhani',sans-serif;
+                                 color:var(--text-main);letter-spacing:0.5px;">
+                        <i class="bi bi-shield-fill me-1" style="color:var(--pink);"></i>管理员码
+                    </span>
+                </label>
+                <span style="font-size:0.78rem;color:var(--text-muted);">
+                    勾选后使用此码注册的用户自动获得 <strong style="color:var(--pink);">管理员权限</strong>
+                </span>
+            </div>
+        </form>
+
+        {% if invite_codes %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle" style="font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th>邀请码</th>
+                        <th style="width:90px;">权限</th>
+                        <th style="width:90px;">剩余次数</th>
+                        <th>备注</th>
+                        <th style="width:140px;">创建时间</th>
+                        <th style="width:60px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for code in invite_codes %}
+                <tr>
+                    <td>
+                        <code style="color:var(--cyan);font-size:0.9rem;">{{ code.code }}</code>
+                    </td>
+                    <td>
+                        {% if code.grants_admin %}
+                        <span style="font-size:0.75rem;font-weight:700;font-family:'Rajdhani',sans-serif;
+                                     padding:2px 8px;border-radius:4px;white-space:nowrap;
+                                     background:rgba(255,45,120,0.15);color:var(--pink);
+                                     border:1px solid rgba(255,45,120,0.3);display:inline-block;">
+                            <i class="bi bi-shield-fill me-1"></i>管理员
+                        </span>
+                        {% else %}
+                        <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">普通</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if code.remaining_uses == -1 %}
+                        <span style="color:var(--green);">无限</span>
+                        {% elif code.remaining_uses == 0 %}
+                        <span style="color:var(--text-muted);">已用完</span>
+                        {% else %}
+                        {{ code.remaining_uses }}
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--text-muted);">{{ code.remark or '—' }}</td>
+                    <td style="color:var(--text-muted);font-size:0.78rem;">
+                        {{ code.created_at.strftime('%Y-%m-%d %H:%M') }}
+                    </td>
+                    <td>
+                        <form method="post" action="{{ url_for('admin_settings') }}"
+                              class="d-inline">
+                            <input type="hidden" name="delete_invite" value="1">
+                            <input type="hidden" name="code_id" value="{{ code.id }}">
+                            <button type="submit" class="btn btn-danger btn-sm"
+                                    onclick="return confirm('确定删除此邀请码？')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0" style="font-size:0.85rem;">暂无邀请码</p>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.settings-card { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.settings-card__header {
+    display:flex; align-items:center;
+    padding:10px 16px;
+    background:rgba(0,220,255,0.06);
+    border-bottom:1px solid var(--border);
+    font-family:'Rajdhani',sans-serif; font-weight:700;
+    font-size:0.95rem; letter-spacing:1.5px; color:var(--cyan);
+}
+.header-hint {
+    margin-left:auto;
+    font-family:'Noto Sans SC',sans-serif; font-size:0.72rem;
+    font-weight:400; letter-spacing:0; color:var(--text-muted);
+}
+.settings-card__body { padding:18px 16px; }
+.field-label { display:block; font-size:0.78rem; color:var(--text-muted); margin-bottom:5px; }
+
+/* 时间网格 */
+.time-grid { display:flex; flex-direction:column; gap:8px; }
+.time-row {
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:10px 14px; border-radius:8px;
+    border:1px solid var(--border); background:rgba(255,255,255,0.02);
+}
+.time-row__label { width:80px; font-weight:600; font-size:0.88rem; flex-shrink:0; }
+.time-row__fields { display:flex; align-items:center; gap:8px; flex:1; flex-wrap:wrap; }
+.time-field { display:flex; align-items:center; gap:7px; flex:1; min-width:200px; }
+.time-field__badge {
+    font-size:0.65rem; font-weight:700; font-family:'Rajdhani',sans-serif;
+    padding:2px 7px; border-radius:4px; letter-spacing:0.5px; flex-shrink:0;
+}
+.time-field__badge.open  { background:rgba(6,214,160,0.15);  color:var(--green); border:1px solid rgba(6,214,160,0.3); }
+.time-field__badge.close { background:rgba(255,45,120,0.12);  color:var(--pink);  border:1px solid rgba(255,45,120,0.25); }
+.time-input {
+    flex:1; background:rgba(13,20,33,0.8); border:1px solid var(--border);
+    border-radius:6px; color:var(--text-main); padding:4px 10px;
+    font-size:0.83rem; font-family:'Space Mono',monospace;
+    outline:none; transition:border-color 0.2s; color-scheme:dark;
+}
+.time-input:focus { border-color:var(--cyan); box-shadow:0 0 0 2px rgba(0,220,255,0.12); }
+.time-sep { color:var(--text-muted); font-size:0.85rem; flex-shrink:0; }
+.btn-clear-time {
+    background:none; border:none; color:var(--text-muted);
+    font-size:1rem; padding:2px 4px; cursor:pointer; flex-shrink:0;
+    transition:color 0.15s;
+}
+.btn-clear-time:hover { color:var(--pink); }
+
+/* ── 模块开关 toggle ── */
+.module-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+}
+.module-toggle input { display: none; }
+.toggle-track {
+    width: 36px; height: 20px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid var(--border);
+    position: relative;
+    transition: background 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+}
+.toggle-thumb {
+    position: absolute;
+    left: 2px; top: 2px;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: transform 0.2s, background 0.2s;
+}
+.module-toggle input:checked + .toggle-track {
+    background: rgba(0,220,255,0.25);
+    border-color: var(--cyan);
+}
+.module-toggle input:checked + .toggle-track .toggle-thumb {
+    transform: translateX(16px);
+    background: var(--cyan);
+}
+.toggle-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.module-toggle input:checked ~ .toggle-label { color: var(--cyan); }
+
+/* ── Ban 曲显示选项行 ── */
+.toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    cursor: default;
+    flex-wrap: wrap;
+}
+.toggle-row__info { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.toggle-row__label { font-size: 0.88rem; font-weight: 600; color: var(--text-main); font-family: 'Rajdhani', sans-serif; }
+.toggle-row__desc { font-size: 0.75rem; color: var(--text-muted); }
+</style>
+
+<script>
+(function tick() {
+    const now = new Date();
+    const p = n => String(n).padStart(2,'0');
+    const el = document.getElementById('server-time');
+    if (el) el.textContent =
+        `${now.getFullYear()}-${p(now.getMonth()+1)}-${p(now.getDate())} `+
+        `${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
+    setTimeout(tick, 1000);
+})();
+
+function clearTimes(btn) {
+    btn.closest('.time-row__fields').querySelectorAll('.time-input')
+       .forEach(i => i.value = '');
+}
+</script>
+
+
+<!-- ══ 数据重置 ══ -->
+<div class="settings-card mb-4" style="border-color:rgba(255,45,120,0.25);">
+    <div class="settings-card__header" style="background:rgba(255,45,120,0.07);color:var(--pink);">
+        <i class="bi bi-arrow-counterclockwise me-2"></i>赛事数据重置
+        <span class="header-hint" style="color:rgba(255,45,120,0.6);">⚠ 操作不可撤销，请谨慎使用</span>
+    </div>
+    <div class="settings-card__body">
+        <div class="reset-grid">
+
+            <div class="reset-item">
+                <div class="reset-item__info">
+                    <i class="bi bi-hand-thumbs-up" style="color:var(--cyan);"></i>
+                    <div>
+                        <div class="reset-item__label">投票数据</div>
+                        <div class="reset-item__desc">清空所有用户投票记录，保留投票主题和选项</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-reset btn-sm"
+                        onclick="openResetConfirm('votes','投票数据','清空所有用户的投票记录，投票主题和选项定义将保留')">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                </button>
+            </div>
+
+            <div class="reset-item">
+                <div class="reset-item__info">
+                    <i class="bi bi-music-note-list" style="color:var(--cyan);"></i>
+                    <div>
+                        <div class="reset-item__label">选曲数据</div>
+                        <div class="reset-item__desc">清空所有用户的选曲记录，歌曲库不受影响</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-reset btn-sm"
+                        onclick="openResetConfirm('selections','选曲数据','清空所有用户的选曲记录，歌曲库数据不受影响')">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                </button>
+            </div>
+
+            <div class="reset-item">
+                <div class="reset-item__info">
+                    <i class="bi bi-slash-circle" style="color:var(--pink);"></i>
+                    <div>
+                        <div class="reset-item__label">Ban 曲数据</div>
+                        <div class="reset-item__desc">清空所有 Ban 曲记录，所有歌曲恢复可用</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-reset btn-sm"
+                        onclick="openResetConfirm('bans','Ban 曲数据','清空所有 Ban 曲记录，所有歌曲将恢复未 Ban 状态')">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                </button>
+            </div>
+
+            <div class="reset-item">
+                <div class="reset-item__info">
+                    <i class="bi bi-stars" style="color:var(--gold);"></i>
+                    <div>
+                        <div class="reset-item__label">抽奖获奖记录</div>
+                        <div class="reset-item__desc">删除所有奖品及抽奖记录</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-reset btn-sm"
+                        onclick="openResetConfirm('lottery','抽奖数据','删除所有奖品记录（含名称、数量等全部信息）')">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                </button>
+            </div>
+
+            <div class="reset-item">
+                <div class="reset-item__info">
+                    <i class="bi bi-bar-chart-line" style="color:var(--green);"></i>
+                    <div>
+                        <div class="reset-item__label">计分表数据</div>
+                        <div class="reset-item__desc">删除所有对局及关联的歌曲、成绩数据</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-reset btn-sm"
+                        onclick="openResetConfirm('scores','计分表数据','删除所有对局（Match）及关联的歌曲、成绩数据')">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                </button>
+            </div>
+
+            <!-- 课题数据 -->
+            <div class="reset-item">
+                <div class="reset-item__info">
+                    <i class="bi bi-journal-bookmark" style="color:var(--gold);"></i>
+                    <div>
+                        <div class="reset-item__label">课题数据</div>
+                        <div class="reset-item__desc">删除所有课题及提交记录</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-reset btn-sm"
+                        onclick="openResetConfirm('assignments','课题数据','删除所有课题定义及学员提交的成绩记录')">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                </button>
+            </div>
+
+        </div>
+
+        <!-- 一键全部重置 -->
+        <div class="mt-4 pt-3" style="border-top:1px solid rgba(255,45,120,0.2);">
+            <button class="btn btn-danger w-100"
+                    onclick="openResetConfirm('all','全部赛事数据','同时清空投票、选曲、Ban曲、课题，并删除所有奖品和所有对局数据')">
+                <i class="bi bi-exclamation-triangle me-2"></i>一键重置全部赛事数据
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 通用重置确认 Modal -->
+<div id="modal-reset-confirm" class="reset-modal" style="display:none">
+    <div class="reset-modal__box">
+        <div class="reset-modal__header">
+            <span><i class="bi bi-exclamation-triangle me-2"></i>确认重置：<span id="reset-title-text"></span></span>
+            <button onclick="closeResetModal()">&times;</button>
+        </div>
+        <div class="p-4">
+            <div class="reset-warn-box mb-4">
+                <i class="bi bi-exclamation-circle me-2" style="color:var(--pink);"></i>
+                <span id="reset-desc-text"></span>
+                <br><span style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;display:block;">操作不可撤销，请确认后继续。</span>
+            </div>
+            <form id="reset-form" method="post">
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="closeResetModal()">取消</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-4">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>确认重置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.reset-grid { display:flex; flex-direction:column; gap:8px; }
+.reset-item {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px 14px; border-radius:8px;
+    border:1px solid var(--border); background:rgba(255,255,255,0.02);
+    flex-wrap:wrap;
+}
+.reset-item__info { display:flex; align-items:center; gap:12px; flex:1; min-width:200px; }
+.reset-item__info > i { font-size:1.1rem; flex-shrink:0; }
+.reset-item__label { font-size:0.88rem; font-weight:600; color:var(--text-main); font-family:'Rajdhani',sans-serif; }
+.reset-item__desc { font-size:0.75rem; color:var(--text-muted); margin-top:2px; }
+.btn-outline-reset {
+    border:1px solid rgba(255,45,120,0.4); color:var(--pink);
+    background:transparent; font-size:0.78rem; white-space:nowrap;
+    padding:4px 12px; border-radius:6px; transition:all .15s;
+    font-family:'Rajdhani',sans-serif; font-weight:600; letter-spacing:0.5px;
+}
+.btn-outline-reset:hover { background:rgba(255,45,120,0.12); border-color:var(--pink); color:var(--pink); }
+.reset-modal { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1060; display:flex; align-items:center; justify-content:center; }
+.reset-modal__box { background:var(--bg-card); border:1px solid rgba(255,45,120,0.3); border-radius:10px; width:90%; max-width:440px; overflow:hidden; }
+.reset-modal__header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:rgba(255,45,120,0.08); border-bottom:1px solid rgba(255,45,120,0.2); font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.9rem; color:var(--pink); letter-spacing:1px; }
+.reset-modal__header button { background:none; border:none; color:var(--text-muted); font-size:1.3rem; line-height:1; cursor:pointer; }
+.reset-warn-box { background:rgba(255,45,120,0.07); border:1px solid rgba(255,45,120,0.25); border-radius:8px; padding:14px 16px; font-size:0.88rem; color:var(--text-main); line-height:1.6; }
+</style>
+
+<script>
+const _resetRoutes = {
+    votes:      '{{ url_for("admin_reset_votes") }}',
+    selections: '{{ url_for("admin_reset_selections") }}',
+    bans:       '{{ url_for("admin_reset_bans") }}',
+    lottery:    '{{ url_for("admin_reset_lottery") }}',
+    scores:     '{{ url_for("admin_reset_scores") }}',
+    assignments:'{{ url_for("admin_reset_assignments") }}',
+    all:        '{{ url_for("admin_reset_all") }}'
+};
+function openResetConfirm(key, title, desc) {
+    document.getElementById('reset-title-text').textContent = title;
+    document.getElementById('reset-desc-text').textContent  = desc;
+    document.getElementById('reset-form').action = _resetRoutes[key];
+    document.getElementById('modal-reset-confirm').style.display = 'flex';
+}
+function closeResetModal() {
+    document.getElementById('modal-reset-confirm').style.display = 'none';
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeResetModal();
+});
+</script>
+
+{% endblock %}

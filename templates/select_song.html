@@ -1,0 +1,1230 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- ══ 页头 ══ -->
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-music-note-list me-2"></i>选曲</h2>
+        <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">SONG SELECTION</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="card px-3 py-2 text-center" style="border-color:var(--cyan);min-width:120px;">
+            <div id="sel-counter" style="font-family:'Space Mono',monospace;font-size:1.2rem;color:var(--cyan);">
+                {{ selected_count }} <span style="color:var(--text-muted);font-size:0.9rem;">/ {{ max_select }}</span>
+            </div>
+            <div style="font-size:0.7rem;color:var(--text-muted);letter-spacing:1px;">已选 / 上限</div>
+        </div>
+<button id="btn-confirm-sel" class="btn btn-sm" style="background:var(--cyan);color:var(--bg-deep);font-weight:700;" onclick="openConfirmModal()">
+            <i class="bi bi-check2-circle me-1"></i>确认提交
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('modal-random-sel').style.display='flex'">
+            <i class="bi bi-shuffle me-1"></i>随机选曲
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('modal-reset-mine').style.display='flex'">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>重置选曲
+        </button>
+        {% if current_user.is_admin %}
+        <button class="btn btn-danger btn-sm" onclick="document.getElementById('modal-reset-sel').style.display='flex'">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>重置全部选曲
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+
+<!-- ══ 随机选曲弹窗 ══ -->
+<div id="modal-random-sel" class="random-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1050;align-items:center;justify-content:center;">
+    <div class="reset-modal__box" style="max-width:380px;">
+        <div class="reset-modal__header" style="background:rgba(0,220,255,0.07);color:var(--cyan);border-color:rgba(0,220,255,0.2);">
+            <span><i class="bi bi-shuffle me-2"></i>随机选曲</span>
+            <button onclick="document.getElementById('modal-random-sel').style.display='none'">&times;</button>
+        </div>
+        <!-- 步骤1：设置随机数量 -->
+        <div id="random-step1" class="p-4">
+            <div class="mb-3" style="font-size:0.82rem;color:var(--text-muted);">
+                曲库可选：<span id="random-pool-count" style="color:var(--cyan);font-family:'Space Mono',monospace;">0</span> 首
+                <span id="random-already-selected" style="display:none;">
+                    &nbsp;·&nbsp; 剩余可选 <span id="random-remain-count" style="color:var(--cyan);"></span> 首
+                </span>
+            </div>
+            <div class="mb-4">
+                <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:6px;letter-spacing:0.5px;">随机数量</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input id="random-count-input" type="number" min="1" max="{{ max_select }}" value="1"
+                           style="width:80px;background:rgba(13,20,33,0.9)!important;border:1px solid var(--border)!important;color:var(--text-main)!important;border-radius:6px;padding:5px 10px;font-family:'Space Mono',monospace;font-size:0.9rem;">
+                    <span style="font-size:0.78rem;color:var(--text-muted);">首（最多 {{ max_select }} 首）</span>
+                </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-sm btn-secondary"
+                        onclick="document.getElementById('modal-random-sel').style.display='none'">取消</button>
+                <button type="button" class="btn btn-sm"
+                        style="background:var(--cyan);color:var(--bg-deep);font-weight:700;"
+                        onclick="doRandomPick()">
+                    <i class="bi bi-shuffle me-1"></i>随机抽取
+                </button>
+            </div>
+        </div>
+
+        <!-- 步骤2：确认随机结果 -->
+        <div id="random-step2" style="display:none;">
+            <div class="px-4 pt-3 pb-2" style="font-size:0.82rem;color:var(--text-muted);border-bottom:1px solid var(--border);">
+                随机抽到 <span id="random-result-count" style="color:var(--cyan);font-family:'Space Mono',monospace;"></span> 首，请确认后选曲：
+            </div>
+            <!-- 卡片预览区 -->
+            <div id="random-preview-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:24px 10px;padding:20px 16px;max-height:60vh;overflow-y:auto;"></div>
+            <div class="d-flex justify-content-end gap-2 p-4 pt-2" style="border-top:1px solid var(--border);">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="backToRandomStep1()">重新随机</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('modal-random-sel').style.display='none'">取消</button>
+                <button type="button" class="btn btn-sm"
+                        style="background:var(--cyan);color:var(--bg-deep);font-weight:700;"
+                        onclick="confirmRandomSelect()">
+                    <i class="bi bi-check2-circle me-1"></i>确认选曲
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 用户重置自己选曲弹窗 ══ -->
+<div id="modal-reset-mine" class="reset-modal" style="display:none">
+    <div class="reset-modal__box">
+        <div class="reset-modal__header">
+            <span><i class="bi bi-exclamation-triangle me-2"></i>重置我的选曲</span>
+            <button onclick="document.getElementById('modal-reset-mine').style.display='none'">&times;</button>
+        </div>
+        <div class="p-4">
+            <div class="reset-warn-box mb-4">
+                <i class="bi bi-exclamation-circle me-2" style="color:var(--pink);"></i>
+                此操作将清空<strong>你自己的全部选曲记录</strong>，可重新开始选曲。
+                <br><span style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;display:block;">操作不可撤销，请确认后继续。</span>
+            </div>
+            <form method="post" action="{{ url_for('reset_my_selections') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary"
+                            onclick="document.getElementById('modal-reset-mine').style.display='none'">取消</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-4">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>确认重置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if current_user.is_admin %}
+<div id="modal-reset-sel" class="reset-modal" style="display:none">
+    <div class="reset-modal__box">
+        <div class="reset-modal__header">
+            <span><i class="bi bi-exclamation-triangle me-2"></i>重置选曲数据</span>
+            <button onclick="document.getElementById('modal-reset-sel').style.display='none'">&times;</button>
+        </div>
+        <div class="p-4">
+            <div class="reset-warn-box mb-4">
+                <i class="bi bi-exclamation-circle me-2" style="color:var(--pink);"></i>
+                此操作将清空<strong>所有用户的选曲记录</strong>，歌曲库数据不受影响。
+                <br><span style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;display:block;">操作不可撤销，请确认后继续。</span>
+            </div>
+            <form method="post" action="{{ url_for('admin_reset_selections') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary"
+                            onclick="document.getElementById('modal-reset-sel').style.display='none'">取消</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-4">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>确认重置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ══ 筛选栏（纯 JS，不提交表单） ══ -->
+<div class="card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-3">
+            <label class="field-label">分类</label>
+            <select id="f-category" class="form-select form-select-sm">
+                <option value="">所有分类</option>
+                {% for cat in categories %}
+                <option value="{{ cat }}" {% if cat == current_category %}selected{% endif %}>{{ cat }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="field-label">难度</label>
+            <select id="f-difficulty" class="form-select form-select-sm">
+                <option value="">所有难度</option>
+                {% for diff in difficulties %}
+                <option value="{{ diff }}" {% if diff == current_difficulty %}selected{% endif %}>{{ diff }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="field-label">类别</label>
+            <select id="f-type" class="form-select form-select-sm">
+                <option value="">SD + DX</option>
+                <option value="SD" {% if current_song_type == 'SD' %}selected{% endif %}>标准</option>
+                <option value="DX" {% if current_song_type == 'DX' %}selected{% endif %}>DX</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="field-label">搜索</label>
+            <input id="f-search" type="text" class="form-control form-control-sm"
+                   placeholder="输入曲名关键词" value="{{ current_search }}">
+        </div>
+        <div class="col-12 col-md-2">
+            <button class="btn btn-secondary btn-sm w-100" onclick="clearFilters()">
+                <i class="bi bi-x-circle me-1"></i>清除筛选
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ 等级快捷筛选栏 ══ -->
+<div class="level-bar mb-4">
+    <span class="level-bar__label">等级</span>
+    <div class="level-chips" id="level-chips">
+        {%- set levels = ['1','2','3','4','5','6','7','7+','8','8+','9','9+','10','10+','11','11+','12','12+','13','13+','14','14+','15'] -%}
+        <button class="lv-chip lv-chip--all lv-chip--active" data-level="">全部</button>
+        {% for lv in levels %}
+        <button class="lv-chip" data-level="{{ lv }}">{{ lv }}</button>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 结果数量 -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3" id="result-info" style="display:none!important;">
+    <div style="font-size:0.78rem;color:var(--text-muted);">
+        共 <span id="result-count" style="color:var(--cyan);font-family:'Space Mono',monospace;"></span> 首
+        &nbsp;·&nbsp;
+        第 <span id="page-cur" style="color:var(--cyan);font-family:'Space Mono',monospace;"></span> /
+        <span id="page-total" style="font-family:'Space Mono',monospace;"></span> 页
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <span style="font-size:0.75rem;color:var(--text-muted);">每页</span>
+        <div class="page-size-btns" id="page-size-btns">
+            <button class="psz-btn psz-btn--active" data-size="20">20</button>
+            <button class="psz-btn" data-size="30">30</button>
+            <button class="psz-btn" data-size="50">50</button>
+            <button class="psz-btn" data-size="100">100</button>
+        </div>
+    </div>
+</div>
+
+<!-- 歌曲网格 -->
+<div class="mai-grid" id="song-grid" style="margin-top:28px;"></div>
+
+<!-- 分页导航 -->
+<div id="pagination" class="pagination-bar" style="display:none;"></div>
+
+<!-- 无结果 -->
+<div id="empty-tip" class="card text-center py-5" style="display:none">
+    <i class="bi bi-search" style="font-size:2rem;color:var(--text-muted);"></i>
+    <p class="text-muted mt-3 mb-0">没有找到符合条件的歌曲。</p>
+</div>
+
+<!-- 未筛选 -->
+<div id="idle-tip" class="card text-center py-5">
+    <i class="bi bi-music-note-beamed" style="font-size:2.5rem;color:var(--text-muted);"></i>
+    <p class="text-muted mt-3 mb-0">请使用上方筛选条件查找歌曲。</p>
+</div>
+
+<!-- 歌曲数据（Jinja → JS，避免额外请求） -->
+<script id="song-data" type="application/json">{{ songs | tojson }}</script>
+<script id="state-data" type="application/json">{
+  "selectedIds": {{ selected_ids | list | tojson }},
+  "bannedIds":   {{ banned_ids   | list | tojson }},
+  "maxSelect":   {{ max_select }},
+  "addUrl":      "{{ url_for('add_song_selection', song_id=0) | replace('/0', '') }}",
+  "removeUrl":   "{{ url_for('remove_song_selection', song_id=0) | replace('/0', '') }}",
+  "confirmUrl":  "{{ url_for('confirm_song_selection') }}",
+  "csrfToken":   "{{ csrf_token() }}",
+  "isAdmin":     {{ 'true' if current_user.is_admin else 'false' }},
+  "addAssignmentUrl": "{{ url_for('admin_assignment_add_from_song', song_id=0) | replace('/0', '') }}"
+}</script>
+
+<!-- ══ 确认提交弹窗 ══ -->
+<div id="modal-confirm-sel" class="confirm-modal" style="display:none">
+    <div class="confirm-modal__box">
+        <div class="confirm-modal__header">
+            <span><i class="bi bi-check2-circle me-2"></i>确认已选铺面</span>
+            <button onclick="closeConfirmModal()">&times;</button>
+        </div>
+        <div class="confirm-modal__body">
+            <div id="confirm-sel-grid" class="confirm-grid"></div>
+            <div id="confirm-empty" class="text-center py-4" style="display:none">
+                <i class="bi bi-music-note-beamed" style="font-size:2rem;color:var(--text-muted);"></i>
+                <p class="text-muted mt-2 mb-0" style="font-size:0.85rem;">尚未选择任何铺面</p>
+            </div>
+        </div>
+        <div class="confirm-modal__footer">
+            <span id="confirm-count-text" style="font-size:0.82rem;color:var(--text-muted);"></span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-secondary" onclick="closeConfirmModal()">继续选曲</button>
+                <button class="btn btn-sm btn-primary px-4" onclick="submitConfirm()">
+                    <i class="bi bi-check-lg me-1"></i>确认提交
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if current_user.is_admin %}
+<!-- ══ 设为课题弹窗 ══ -->
+<div id="modal-assign" class="assign-modal" style="display:none">
+    <div class="assign-modal__box">
+        <div class="assign-modal__header">
+            <span><i class="bi bi-journal-plus me-2"></i>设为课题</span>
+            <button onclick="closeAssignModal()">&times;</button>
+        </div>
+        <div class="p-4">
+            <div id="assign-song-info" class="mb-3 p-2" style="background:rgba(255,170,0,0.06);border:1px solid rgba(255,170,0,0.15);border-radius:8px;font-size:0.88rem;">
+            </div>
+            <form id="assign-form" method="POST" action="">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:0.82rem;">课题标题（留空则自动使用曲名）</label>
+                    <input type="text" name="title" id="assign-title" class="form-control" maxlength="200"
+                           placeholder="如：MASTER 课题 #1">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:0.82rem;">课题说明（可选）</label>
+                    <textarea name="description" id="assign-desc" class="form-control" rows="2" maxlength="2000"
+                              placeholder="描述课题要求、规则等"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" style="font-size:0.82rem;"><i class="bi bi-link-45deg me-1"></i>同步到计分 Match（可选）</label>
+                    <div class="d-flex gap-2 align-items-center mb-2">
+                        <select id="assign-tournament-sel" class="form-select form-select-sm" style="flex:1;min-width:0;"
+                                onchange="assignOnTournamentChange(this.value)">
+                            <option value="">不同步</option>
+                            {% for t in assign_tournaments %}
+                            <option value="{{ t.id }}">{{ t.name }}{% if t.is_active %} ★{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-sm px-2" style="font-size:0.72rem;background:rgba(124,58,237,0.15);color:#a855f7;border-color:rgba(124,58,237,0.3);white-space:nowrap;"
+                                onclick="assignInlineCreate('tournament')">+ 赛事</button>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center" id="assign-match-row" style="display:none!important;">
+                        <select id="assign-match-sel" name="match_id" class="form-select form-select-sm" style="flex:1;min-width:0;" disabled>
+                            <option value="">选择 Match</option>
+                        </select>
+                        <button type="button" class="btn btn-sm px-2" style="font-size:0.72rem;background:rgba(0,220,255,0.12);color:var(--cyan);border-color:rgba(0,220,255,0.25);white-space:nowrap;"
+                                onclick="assignInlineCreate('match')" id="assign-btn-new-match" disabled>+ Match</button>
+                    </div>
+                    <div id="assign-inline-area" class="mt-2" style="display:none;"></div>
+                    <small class="text-muted" style="font-size:0.72rem;">将自动添加当前歌曲为 Match 歌曲列，审核通过后写入成绩</small>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="closeAssignModal()">取消</button>
+                    <button type="submit" class="btn btn-sm px-4" style="background:var(--gold);color:#000;font-weight:700;">
+                        <i class="bi bi-journal-plus me-1"></i>创建课题
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
+<style>
+.field-label { display:block; font-size:.78rem; color:var(--text-muted); margin-bottom:4px; }
+.form-select,.form-control {
+    background:rgba(13,20,33,.9)!important; border-color:var(--border)!important; color:var(--text-main)!important;
+}
+.form-select:focus,.form-control:focus {
+    border-color:var(--cyan)!important; box-shadow:0 0 0 2px rgba(0,220,255,.12)!important;
+}
+
+/* 等级筛选栏 */
+.level-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.level-bar__label {
+    font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.78rem;
+    color:var(--text-muted); letter-spacing:1px; text-transform:uppercase;
+    white-space:nowrap; flex-shrink:0;
+}
+.level-chips { display:flex; flex-wrap:wrap; gap:5px; }
+.lv-chip {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:36px; height:28px; padding:0 8px; border-radius:6px;
+    font-family:'Space Mono',monospace; font-size:0.72rem; font-weight:700;
+    border:1px solid var(--border); color:var(--text-muted);
+    background:rgba(255,255,255,0.03); cursor:pointer;
+    transition:all 0.15s; white-space:nowrap; user-select:none;
+}
+.lv-chip:hover { border-color:var(--cyan); color:var(--cyan); background:rgba(0,220,255,0.08); }
+.lv-chip--active {
+    border-color:var(--cyan) !important; color:var(--bg-deep) !important;
+    background:var(--cyan) !important; box-shadow:0 0 10px rgba(0,220,255,0.35);
+}
+/* "全部"按钮激活时用不同色调区分 */
+.lv-chip--all.lv-chip--active {
+    background:rgba(0,220,255,0.18) !important;
+    color:var(--cyan) !important;
+    box-shadow:none;
+}
+
+/* 网格 */
+.mai-grid {
+    display:grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap:32px 14px;
+    max-width: calc(5 * 160px + 4 * 14px);
+    margin: 0 auto;
+}
+@media (max-width: 900px) {
+    .mai-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: none; }
+}
+@media (max-width: 680px) {
+    .mai-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 460px) {
+    .mai-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 卡片 */
+.mai-card {
+    display:block; text-decoration:none; cursor:pointer;
+    transition:transform .15s ease;
+}
+.mai-card:hover  { transform:translateY(-3px) scale(1.03); }
+.mai-card:active { transform:scale(.97); }
+.mai-card--selected .mai-card__body { filter:drop-shadow(0 0 8px rgba(6,214,160,.65)); }
+.mai-card--disabled { opacity:0.4; pointer-events:none; cursor:default; }
+.mai-card--banned .mc-cover::after {
+    content:''; position:absolute; inset:0; background:rgba(255,45,120,0.35);
+}
+
+.mai-card__body {
+    position:relative; width:100%; padding-bottom:139.85%; overflow:visible;
+}
+.mc-frame {
+    position:absolute; inset:0; width:100%; height:100%; object-fit:fill; display:block;
+}
+.mc-cover {
+    position:absolute; left:9.90%; top:5.63%; width:80.96%; height:57.53%;
+    overflow:hidden; border-radius:2px; background:#0a0a12; z-index:1;
+}
+.mc-cover img { width:100%; height:100%; object-fit:cover; display:block; }
+.mc-cover__ph {
+    display:flex; width:100%; height:100%;
+    align-items:center; justify-content:center;
+    color:var(--text-muted); font-size:1.5rem;
+}
+.mc-tab {
+    position:absolute; left:0; width:100%; bottom:94.37%; height:16.70%;
+    object-fit:fill; pointer-events:none; z-index:2;
+}
+.mc-badge {
+    position:absolute; left:3%; top:-9.5%; width:42%; height:auto;
+    object-fit:contain; pointer-events:none; z-index:3;
+    image-rendering:crisp-edges; filter:drop-shadow(0 1px 3px rgba(0,0,0,.8));
+}
+/* SD 铺面：Tab 左右镜像，badge 移到右侧（图片本身不翻转） */
+.mc-tab--sd {
+    transform: scaleX(-1);
+}
+.mc-badge--sd {
+    left: auto;
+    right: 3%;
+}
+.mc-rating {
+    position:absolute; left:60%; right:4%; top:63.34%; height:14.52%;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none; z-index:3;
+    font-family:'Space Mono',monospace; font-weight:700; font-size:.78em;
+    color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.9);
+}
+.mc-songname {
+    position:absolute; left:4%; right:4%; top:78.04%; height:16.33%;
+    display:flex; align-items:center; justify-content:flex-start;
+    pointer-events:none; z-index:3; overflow:hidden;
+}
+.mc-songname__inner {
+    font-size:.68em; font-weight:600; color:#fff;
+    text-shadow:0 1px 3px rgba(0,0,0,.9);
+    white-space:nowrap; display:inline-block; margin:0 auto;
+}
+.mc-songname__inner.scrolling {
+    margin:0; animation:song-scroll 6s linear infinite;
+}
+@keyframes song-scroll {
+    0%   { transform:translateX(0); }
+    100% { transform:translateX(var(--scroll-dist)); }
+}
+
+
+/* 分页 */
+.pagination-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-top: 28px;
+    flex-wrap: wrap;
+}
+.pg-btn {
+    min-width: 34px; height: 34px; padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.pg-btn:hover { border-color: var(--cyan); color: var(--cyan); background: rgba(0,220,255,0.08); }
+.pg-btn--active { border-color: var(--cyan) !important; background: var(--cyan) !important; color: var(--bg-deep) !important; font-weight: 700; }
+.pg-btn:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
+.pg-ellipsis { color: var(--text-muted); font-size: 0.8rem; padding: 0 4px; }
+
+/* 每页数量按钮 */
+.page-size-btns { display: flex; gap: 4px; }
+.psz-btn {
+    min-width: 32px; height: 26px; padding: 0 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.psz-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.psz-btn--active { border-color: var(--cyan); background: rgba(0,220,255,0.12); color: var(--cyan); font-weight: 700; }
+
+/* 重置弹窗 */
+.reset-modal { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1050; display:flex; align-items:center; justify-content:center; }
+.reset-modal__box { background:var(--bg-card); border:1px solid rgba(255,45,120,0.3); border-radius:10px; width:90%; max-width:420px; overflow:hidden; }
+.reset-modal__header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; background:rgba(255,45,120,0.08); border-bottom:1px solid rgba(255,45,120,0.2); font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.95rem; color:var(--pink); letter-spacing:1px; }
+.reset-modal__header button { background:none; border:none; color:var(--text-muted); font-size:1.3rem; line-height:1; cursor:pointer; }
+.reset-warn-box { background:rgba(255,45,120,0.07); border:1px solid rgba(255,45,120,0.25); border-radius:8px; padding:14px 16px; font-size:0.88rem; color:var(--text-main); line-height:1.6; }
+
+/* ── 确认提交弹窗 ── */
+.confirm-modal {
+    position:fixed; inset:0; background:rgba(0,0,0,0.72);
+    z-index:1060; display:flex; align-items:center; justify-content:center;
+    padding: 16px;
+}
+.confirm-modal__box {
+    background:var(--bg-card); border:1px solid rgba(0,220,255,0.25);
+    border-radius:12px; width:100%; max-width:720px;
+    max-height:90vh; display:flex; flex-direction:column; overflow:hidden;
+}
+.confirm-modal__header {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 20px; background:rgba(0,220,255,0.07);
+    border-bottom:1px solid rgba(0,220,255,0.2);
+    font-family:'Rajdhani',sans-serif; font-weight:700; font-size:1rem;
+    color:var(--cyan); letter-spacing:1px; flex-shrink:0;
+}
+.confirm-modal__header button {
+    background:none; border:none; color:var(--text-muted);
+    font-size:1.4rem; line-height:1; cursor:pointer;
+}
+.confirm-modal__body {
+    overflow-y:auto; padding:20px; flex:1;
+}
+.confirm-modal__footer {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 20px; border-top:1px solid var(--border); flex-shrink:0;
+    background:rgba(0,0,0,0.2);
+}
+.confirm-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));
+    gap:28px 12px;
+}
+/* 管理员课题按钮 — 放在 Tab 区域 */
+.mc-assign-btn {
+    position:absolute; top:-12%; right:33%; z-index:10;
+    width:28px; height:28px; border-radius:50%;
+    background:rgba(255,170,0,0.85); color:#fff; border:none;
+    font-size:0.8rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transition:opacity .2s;
+    box-shadow:0 2px 6px rgba(0,0,0,0.4);
+}
+/* SD谱按钮放左侧 */
+.mc-assign-btn--sd {
+    right:auto; left:33%;
+}
+.mai-card:hover .mc-assign-btn { opacity:1; }
+.mc-assign-btn:hover { background:rgba(255,170,0,1); transform:scale(1.15); }
+/* 课题弹窗 */
+.assign-modal { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1060;
+    display:flex; align-items:center; justify-content:center; }
+.assign-modal__box { background:var(--bg-card); border:1px solid var(--border);
+    border-radius:14px; width:90%; max-width:420px; box-shadow:0 8px 32px rgba(0,0,0,.5); }
+.assign-modal__header { display:flex; justify-content:space-between; align-items:center;
+    padding:14px 20px; border-bottom:1px solid var(--border);
+    background:rgba(255,170,0,0.07); color:var(--gold);
+    border-radius:14px 14px 0 0; font-weight:700; }
+.assign-modal__header button { background:none; border:none; font-size:1.3rem;
+    color:var(--text-muted); cursor:pointer; }
+</style>
+
+<script>
+(function () {
+'use strict';
+
+const ALL_SONGS   = JSON.parse(document.getElementById('song-data').textContent);
+const STATE       = JSON.parse(document.getElementById('state-data').textContent);
+const selectedIds = new Set(STATE.selectedIds);
+const bannedIds   = new Set(STATE.bannedIds);
+const maxSelect   = STATE.maxSelect;
+const ADD_URL     = STATE.addUrl;
+const REMOVE_URL  = STATE.removeUrl;
+const CONFIRM_URL = STATE.confirmUrl;
+const CSRF_TOKEN  = STATE.csrfToken;
+const IS_ADMIN    = STATE.isAdmin;
+const ADD_ASSIGN_URL = STATE.addAssignmentUrl;
+
+// 选中的歌曲元数据缓存（用于确认弹窗渲染）
+const selectedSongs = new Map();
+// 初始化：把已选的填入缓存
+ALL_SONGS.forEach(s => { if (selectedIds.has(s.id)) selectedSongs.set(s.id, s); });
+
+const DIFF_MAP = {
+    'Basic':'BSC','Advanced':'ADV','Expert':'EXP',
+    'Master':'MST','Re:Master':'MST_Re'
+};
+
+// 筛选状态
+let fCategory   = document.getElementById('f-category').value;
+let fDifficulty = document.getElementById('f-difficulty').value;
+let fType       = document.getElementById('f-type').value;
+let fSearch     = document.getElementById('f-search').value.trim().toLowerCase();
+let fLevels     = new Set();  // 多选等级集合，空表示全部
+
+// ── IntersectionObserver 懒加载 ──
+const imgObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const img = entry.target;
+        if (img.dataset.src) { img.src = img.dataset.src; delete img.dataset.src; }
+        imgObs.unobserve(img);
+    });
+}, { rootMargin: '300px 0px', threshold: 0 });
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function buildCard(song, opts = {}) {
+    const isSel  = opts.forceSel !== undefined ? opts.forceSel : selectedIds.has(song.id);
+    const isBan  = bannedIds.has(song.id);
+    const isFull = selectedIds.size >= maxSelect && !isSel;
+    const dk     = DIFF_MAP[song.difficulty] || 'MST';
+    const isSd   = song.song_type === 'SD';
+
+    let cls = 'mai-card';
+    if (isSel)  cls += ' mai-card--selected';
+    if (isBan)  cls += ' mai-card--banned';
+    if (isFull && !opts.noDisable) cls += ' mai-card--disabled';
+
+    const cover = song.cover_url
+        ? `<img data-src="${esc(song.cover_url)}" src="" alt="">`
+        : `<span class="mc-cover__ph"><i class="bi bi-music-note-beamed"></i></span>`;
+
+    const badge = song.song_type
+        ? `<img class="mc-badge${isSd ? ' mc-badge--sd' : ''}" src="/static/mai/pic/${esc(song.song_type)}.png" alt="${esc(song.song_type)}" draggable="false">`
+        : '';
+
+    const assignBtn = IS_ADMIN
+        ? `<button class="mc-assign-btn${isSd ? ' mc-assign-btn--sd' : ''}" data-assign-id="${song.id}" title="设为课题"
+             onclick="event.stopPropagation(); openAssignModal(${song.id})">
+             <i class="bi bi-journal-plus"></i></button>`
+        : '';
+
+    return `<div class="${cls}" data-id="${song.id}" data-level="${esc(song.level)}"
+     data-cat="${esc(song.category)}" data-diff="${esc(song.difficulty)}"
+     data-type="${esc(song.song_type)}" data-name="${esc(song.name.toLowerCase())}"
+     title="${esc(song.name)}" role="button" tabindex="0">
+  <div class="mai-card__body">
+    <img class="mc-frame" src="/static/mai/pic/UI_TST_MBase_${dk}.png" alt="" draggable="false">
+    <div class="mc-cover">${cover}</div>
+    <img class="mc-tab${isSd ? ' mc-tab--sd' : ''}" src="/static/mai/pic/UI_TST_MBase_${dk}_Tab.png" alt="" draggable="false">
+    ${badge}
+    <div class="mc-rating">${esc(song.rating)}</div>
+    <div class="mc-songname"><span class="mc-songname__inner">${esc(song.name)}</span></div>
+    ${assignBtn}
+  </div>
+</div>`;
+}
+
+// ── 滚动动画 ──
+function initScroll(wrap) {
+    const inner = wrap.querySelector('.mc-songname__inner');
+    if (!inner || inner.classList.contains('scrolling')) return;
+    const ov = inner.scrollWidth - wrap.clientWidth;
+    if (ov > 2) {
+        const sep = '\u3000\u3000\u3000', orig = inner.textContent;
+        inner.textContent = orig + sep + orig;
+        const dist = inner.scrollWidth / 2;
+        inner.style.setProperty('--scroll-dist', `-${dist}px`);
+        inner.style.animationDuration = `${dist / 40}s`;
+        inner.classList.add('scrolling');
+    }
+}
+
+// ── DOM 引用 ──
+const grid        = document.getElementById('song-grid');
+const emptyTip    = document.getElementById('empty-tip');
+const idleTip     = document.getElementById('idle-tip');
+const resultInfo  = document.getElementById('result-info');
+const resultCount = document.getElementById('result-count');
+const btnConfirm  = document.getElementById('btn-confirm-sel');
+const pagination  = document.getElementById('pagination');
+const pageCur     = document.getElementById('page-cur');
+const pageTotal   = document.getElementById('page-total');
+
+// 分页状态
+let _filtered  = [];   // 当前过滤后的全量结果
+let _pageSize  = 20;   // 每页数量
+let _curPage   = 1;    // 当前页（1-based）
+
+function hasFilter() {
+    return fCategory || fDifficulty || fType || fSearch || fLevels.size > 0;
+}
+
+// 渲染当前页的卡片
+function renderPage() {
+    const total = _filtered.length;
+    const pages = Math.max(1, Math.ceil(total / _pageSize));
+    _curPage = Math.min(_curPage, pages);
+
+    const start = (_curPage - 1) * _pageSize;
+    const slice = _filtered.slice(start, start + _pageSize);
+
+    grid.innerHTML = slice.map(s => buildCard(s)).join('');
+    grid.querySelectorAll('img[data-src]').forEach(img => imgObs.observe(img));
+
+    const wraps = Array.from(grid.querySelectorAll('.mc-songname'));
+    let i = 0;
+    (function tick() {
+        const end = Math.min(i + 20, wraps.length);
+        for (; i < end; i++) initScroll(wraps[i]);
+        if (i < wraps.length) requestAnimationFrame(tick);
+    })();
+
+    // 更新计数
+    resultCount.textContent = total;
+    pageCur.textContent   = _curPage;
+    pageTotal.textContent = pages;
+
+    // 渲染分页按钮
+    renderPagination(pages);
+
+    // 切页后滚回顶部
+    grid.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderPagination(pages) {
+    if (pages <= 1) { pagination.style.display = 'none'; return; }
+    pagination.style.display = 'flex';
+
+    const p = _curPage;
+    const btns = [];
+
+    const addBtn = (label, page, active = false, disabled = false) => {
+        btns.push(`<button class="pg-btn${active ? ' pg-btn--active' : ''}"
+            ${disabled ? 'disabled' : `onclick="goPage(${page})"`}>${label}</button>`);
+    };
+    const addEllipsis = () => btns.push('<span class="pg-ellipsis">…</span>');
+
+    addBtn('‹', p - 1, false, p === 1);
+
+    if (pages <= 7) {
+        for (let i = 1; i <= pages; i++) addBtn(i, i, i === p);
+    } else {
+        addBtn(1, 1, p === 1);
+        if (p > 3) addEllipsis();
+        for (let i = Math.max(2, p - 1); i <= Math.min(pages - 1, p + 1); i++)
+            addBtn(i, i, i === p);
+        if (p < pages - 2) addEllipsis();
+        addBtn(pages, pages, p === pages);
+    }
+
+    addBtn('›', p + 1, false, p === pages);
+    pagination.innerHTML = btns.join('');
+}
+
+window.goPage = function(p) {
+    _curPage = p;
+    renderPage();
+};
+
+function applyFilters() {
+    idleTip.style.display = emptyTip.style.display = 'none';
+    resultInfo.style.display = 'none';
+    pagination.style.display = 'none';
+
+    if (!hasFilter()) {
+        idleTip.style.display = 'block';
+        grid.innerHTML = '';
+        return;
+    }
+
+    _filtered = ALL_SONGS.filter(s => {
+        if (fCategory   && s.category               !== fCategory)   return false;
+        if (fDifficulty && s.difficulty              !== fDifficulty) return false;
+        if (fType       && s.song_type               !== fType)       return false;
+        if (fSearch     && !s.name.toLowerCase().includes(fSearch))   return false;
+        if (fLevels.size > 0 && !fLevels.has(s.level))               return false;
+        return true;
+    });
+
+    if (_filtered.length === 0) {
+        emptyTip.style.display = 'block';
+        grid.innerHTML = '';
+        return;
+    }
+
+    _curPage = 1;   // 筛选变化时重置到第一页
+    resultInfo.style.removeProperty('display');  // 清除 !important none
+    resultInfo.style.display = 'flex';
+    renderPage();
+}
+
+// 每页数量切换
+document.getElementById('page-size-btns').addEventListener('click', e => {
+    const btn = e.target.closest('.psz-btn');
+    if (!btn) return;
+    _pageSize = parseInt(btn.dataset.size);
+    document.querySelectorAll('.psz-btn').forEach(b => b.classList.remove('psz-btn--active'));
+    btn.classList.add('psz-btn--active');
+    _curPage = 1;
+    if (_filtered.length > 0) renderPage();
+});
+
+function updateCounter() {
+    document.getElementById('sel-counter').innerHTML =
+        `${selectedIds.size} <span style="color:var(--text-muted);font-size:0.9rem;">/ ${maxSelect}</span>`;
+    // 有选曲时显示确认提交按钮
+    btnConfirm.style.display = selectedIds.size > 0 ? '' : 'none';
+}
+
+function setCardSelected(card, isSel) {
+    card.classList.toggle('mai-card--selected', isSel);
+}
+
+function refreshDisabledState() {
+    const full = selectedIds.size >= maxSelect;
+    grid.querySelectorAll('.mai-card:not(.mai-card--banned)').forEach(c => {
+        const id = parseInt(c.dataset.id);
+        if (!selectedIds.has(id)) {
+            c.classList.toggle('mai-card--disabled', full);
+        }
+    });
+}
+
+// ── 点击卡片：选择 / 取消 ──
+grid.addEventListener('click', async (e) => {
+    const card = e.target.closest('.mai-card');
+    if (!card || card.classList.contains('mai-card--banned')) return;
+
+    const songId = parseInt(card.dataset.id);
+    if (isNaN(songId)) return;
+
+    if (selectedIds.has(songId)) {
+        // ── 取消选择 ──
+        selectedIds.delete(songId);
+        selectedSongs.delete(songId);
+        setCardSelected(card, false);
+        updateCounter();
+        refreshDisabledState();
+
+        try {
+            await fetch(`${REMOVE_URL}/${songId}`, {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': CSRF_TOKEN,
+                           'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `_csrf_token=${encodeURIComponent(CSRF_TOKEN)}`
+            });
+        } catch (_) {}
+
+    } else {
+        // ── 选择 ──
+        if (card.classList.contains('mai-card--disabled')) return;
+
+        setCardSelected(card, true);
+        selectedIds.add(songId);
+        // 缓存歌曲元数据
+        const song = ALL_SONGS.find(s => s.id === songId);
+        if (song) selectedSongs.set(songId, song);
+        updateCounter();
+        refreshDisabledState();
+
+        try {
+            const res = await fetch(`${ADD_URL}/${songId}`, { redirect: 'manual' });
+        } catch (_) {
+            // 回滚
+            selectedIds.delete(songId);
+            selectedSongs.delete(songId);
+            setCardSelected(card, false);
+            updateCounter();
+            refreshDisabledState();
+        }
+    }
+});
+
+// ── 确认提交弹窗 ──
+window.openConfirmModal = function() {
+    const grid2 = document.getElementById('confirm-sel-grid');
+    const empty = document.getElementById('confirm-empty');
+    const countText = document.getElementById('confirm-count-text');
+
+    if (selectedSongs.size === 0) {
+        grid2.innerHTML = '';
+        empty.style.display = 'block';
+        countText.textContent = '尚未选择任何铺面';
+    } else {
+        empty.style.display = 'none';
+        grid2.innerHTML = Array.from(selectedSongs.values())
+            .map(s => buildCard(s, { forceSel: true, noDisable: true }))
+            .join('');
+        // 懒加载
+        grid2.querySelectorAll('img[data-src]').forEach(img => imgObs.observe(img));
+        // 滚动动画
+        grid2.querySelectorAll('.mc-songname').forEach(initScroll);
+        countText.textContent = `已选 ${selectedSongs.size} / ${maxSelect} 首`;
+    }
+    document.getElementById('modal-confirm-sel').style.display = 'flex';
+};
+
+window.closeConfirmModal = function() {
+    document.getElementById('modal-confirm-sel').style.display = 'none';
+};
+
+window.submitConfirm = function() {
+    // 选曲已通过点击实时提交，这里只关闭弹窗并给出反馈
+    closeConfirmModal();
+    // 可选：显示 flash 提示
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(0,220,255,0.15);border:1px solid var(--cyan);color:var(--cyan);padding:10px 24px;border-radius:8px;font-family:Rajdhani,sans-serif;font-weight:700;font-size:0.95rem;letter-spacing:1px;z-index:9999;transition:opacity .4s';
+    toast.textContent = '✓ 选曲已确认提交';
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 2500);
+};
+
+// ── 等级 chip 多选点击 ──
+document.getElementById('level-chips').addEventListener('click', e => {
+    const btn = e.target.closest('.lv-chip');
+    if (!btn) return;
+    const level = btn.dataset.level;
+    const allBtn = document.querySelector('.lv-chip--all');
+
+    if (level === '') {
+        // 点击"全部"：清除所有选中，回到全部
+        fLevels.clear();
+        document.querySelectorAll('.lv-chip').forEach(b => b.classList.remove('lv-chip--active'));
+        allBtn.classList.add('lv-chip--active');
+    } else {
+        // 切换具体等级
+        if (fLevels.has(level)) {
+            fLevels.delete(level);
+            btn.classList.remove('lv-chip--active');
+        } else {
+            fLevels.add(level);
+            btn.classList.add('lv-chip--active');
+        }
+        // 更新"全部"按钮状态
+        if (fLevels.size === 0) {
+            allBtn.classList.add('lv-chip--active');
+        } else {
+            allBtn.classList.remove('lv-chip--active');
+        }
+    }
+    applyFilters();
+});
+
+// ── 筛选控件 ──
+document.getElementById('f-category').addEventListener('change',  e => { fCategory   = e.target.value; applyFilters(); });
+document.getElementById('f-difficulty').addEventListener('change', e => { fDifficulty = e.target.value; applyFilters(); });
+document.getElementById('f-type').addEventListener('change',       e => { fType       = e.target.value; applyFilters(); });
+let _st;
+document.getElementById('f-search').addEventListener('input', e => {
+    clearTimeout(_st);
+    _st = setTimeout(() => { fSearch = e.target.value.trim().toLowerCase(); applyFilters(); }, 200);
+});
+
+// ── 随机选曲 ──
+window.openRandomModal = function() {
+    // 用 modal-random-sel 自带的按钮调用，这里是辅助入口
+    document.getElementById('modal-random-sel').style.display = 'flex';
+};
+
+// 打开弹窗时更新曲库信息（绑定在按钮的 onclick 里通过弹窗 show 触发）
+document.getElementById('modal-random-sel').addEventListener('show', updateRandomInfo);
+
+function updateRandomInfo() {
+    const pool = _filtered.filter(s => !selectedIds.has(s.id) && !bannedIds.has(s.id));
+    document.getElementById('random-pool-count').textContent = pool.length;
+    const remain = maxSelect - selectedIds.size;
+    const infoEl = document.getElementById('random-already-selected');
+    if (selectedIds.size > 0) {
+        infoEl.style.display = 'block';
+        document.getElementById('random-sel-count').textContent   = selectedIds.size;
+        document.getElementById('random-remain-count').textContent = Math.max(0, remain);
+    } else {
+        infoEl.style.display = 'none';
+    }
+    // 调整数量上限
+    const countInput = document.getElementById('random-count-input');
+    countInput.max   = Math.min(maxSelect, pool.length);
+    if (parseInt(countInput.value) > remain) countInput.value = Math.max(1, remain);
+}
+
+// 每次打开弹窗时刷新信息
+document.getElementById('modal-random-sel').addEventListener('transitionend', updateRandomInfo);
+// 用 MutationObserver 监听 display 变化来触发更新
+(function() {
+    const modal = document.getElementById('modal-random-sel');
+    const obs = new MutationObserver(() => {
+        if (modal.style.display !== 'none') updateRandomInfo();
+    });
+    obs.observe(modal, { attributes: true, attributeFilter: ['style'] });
+})();
+
+// 当前随机抽取结果（待确认）
+let _randomPicks = [];
+
+window.doRandomPick = function() {
+    const pool   = _filtered.filter(s => !selectedIds.has(s.id) && !bannedIds.has(s.id));
+    const remain = maxSelect - selectedIds.size;
+    if (pool.length === 0) { alert('当前筛选曲库中没有可选的曲目'); return; }
+    if (remain <= 0)       { alert('已达选曲上限，无法继续选曲'); return; }
+
+    const wantRaw = parseInt(document.getElementById('random-count-input').value) || 1;
+    const want    = Math.min(wantRaw, remain, pool.length);
+
+    // Fisher-Yates 随机抽取
+    _randomPicks = [...pool].sort(() => Math.random() - 0.5).slice(0, want);
+
+    // 切换到步骤2：预览卡片
+    document.getElementById('random-step1').style.display = 'none';
+    document.getElementById('random-step2').style.display = 'block';
+    document.getElementById('random-result-count').textContent = _randomPicks.length;
+
+    // 渲染预览卡片（复用 buildCard，强制已选状态）
+    const previewGrid = document.getElementById('random-preview-grid');
+    previewGrid.innerHTML = _randomPicks.map(s => buildCard(s, { forceSel: false, noDisable: true })).join('');
+    // 懒加载
+    previewGrid.querySelectorAll('img[data-src]').forEach(img => imgObs.observe(img));
+    // 滚动动画
+    previewGrid.querySelectorAll('.mc-songname').forEach(w => initScroll(w));
+};
+
+window.backToRandomStep1 = function() {
+    _randomPicks = [];
+    document.getElementById('random-step2').style.display = 'none';
+    document.getElementById('random-step1').style.display = 'block';
+};
+
+window.confirmRandomSelect = async function() {
+    document.getElementById('modal-random-sel').style.display = 'none';
+    document.getElementById('random-step2').style.display = 'none';
+    document.getElementById('random-step1').style.display = 'block';
+
+    for (const song of _randomPicks) {
+        if (selectedIds.has(song.id)) continue;
+        // 乐观更新主网格
+        const card = grid.querySelector(`.mai-card[data-id="${song.id}"]`);
+        if (card) {
+            card.classList.add('mai-card--selected');
+        }
+        selectedIds.add(song.id);
+        selectedSongs.set(song.id, song);
+        try { await fetch(`${ADD_URL}/${song.id}`, { redirect: 'manual' }); } catch(_) {}
+    }
+    _randomPicks = [];
+    updateCounter();
+    refreshDisabledState();
+};
+
+window.clearFilters = function() {
+    document.getElementById('f-category').value   = '';
+    document.getElementById('f-difficulty').value = '';
+    document.getElementById('f-type').value        = '';
+    document.getElementById('f-search').value      = '';
+    fCategory = ''; fDifficulty = ''; fType = ''; fSearch = '';
+    fLevels.clear();
+    document.querySelectorAll('.lv-chip').forEach(b => b.classList.remove('lv-chip--active'));
+    document.querySelector('.lv-chip--all').classList.add('lv-chip--active');
+    applyFilters();
+};
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        closeConfirmModal();
+        const m = document.getElementById('modal-reset-sel');
+        if (m) m.style.display = 'none';
+        const m2 = document.getElementById('modal-reset-mine');
+        if (m2) m2.style.display = 'none';
+        const m3 = document.getElementById('modal-random-sel');
+        if (m3) m3.style.display = 'none';
+    }
+});
+
+// ── 初始渲染 ──
+updateCounter();
+idleTip.style.display = 'block';
+
+// ── 管理员：设为课题 ──
+if (IS_ADMIN) {
+    const ASSIGN_MATCHES_BY_T = {{ assign_matches_by_t | tojson }};
+
+    window.assignOnTournamentChange = function(tid) {
+        const matchRow = document.getElementById('assign-match-row');
+        const matchSel = document.getElementById('assign-match-sel');
+        matchSel.innerHTML = '<option value="">选择 Match</option>';
+        document.getElementById('assign-btn-new-match').disabled = true;
+        if (!tid) {
+            matchSel.disabled = true;
+            matchRow.style.display = 'none';
+            matchRow.style.setProperty('display', 'none', 'important');
+            return;
+        }
+        const ms = ASSIGN_MATCHES_BY_T[tid] || [];
+        ms.forEach(m => {
+            const o = document.createElement('option');
+            o.value = m.id; o.textContent = m.name;
+            matchSel.appendChild(o);
+        });
+        matchSel.disabled = false;
+        document.getElementById('assign-btn-new-match').disabled = false;
+        matchRow.style.removeProperty('display');
+        matchRow.style.display = 'flex';
+    };
+
+    async function _assignApi(url, body) {
+        const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+        return r.json();
+    }
+
+    window.assignInlineCreate = function(type) {
+        const area = document.getElementById('assign-inline-area');
+        area.style.display = 'block';
+        const label = type === 'tournament' ? '新赛事名称' : '新 Match 名称';
+        const ph = type === 'tournament' ? '如：第三届舞萌大赛' : '如：Match 1 / 决赛';
+        area.innerHTML = `<div class="d-flex gap-2 align-items-center p-2" style="background:rgba(124,58,237,0.04);border:1px solid rgba(124,58,237,0.15);border-radius:8px;">
+            <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap;">${label}</span>
+            <input type="text" id="assign-inline-input" class="form-control form-control-sm" placeholder="${ph}" style="max-width:180px;">
+            <button type="button" class="btn btn-sm px-2" style="background:#a855f7;color:#fff;font-size:0.75rem;" onclick="assignConfirmInline('${type}')">创建</button>
+            <button type="button" class="btn btn-sm btn-secondary px-1" style="font-size:0.75rem;" onclick="document.getElementById('assign-inline-area').style.display='none'">×</button>
+        </div>`;
+        document.getElementById('assign-inline-input').focus();
+        document.getElementById('assign-inline-input').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); assignConfirmInline(type); } };
+    };
+
+    window.assignConfirmInline = async function(type) {
+        const name = document.getElementById('assign-inline-input').value.trim();
+        if (!name) return;
+        const area = document.getElementById('assign-inline-area');
+        if (type === 'tournament') {
+            const res = await _assignApi('/api/score/add_tournament', {name});
+            if (res.ok) {
+                const sel = document.getElementById('assign-tournament-sel');
+                const o = document.createElement('option');
+                o.value = res.tournament_id; o.textContent = name + ' ★';
+                sel.appendChild(o); sel.value = res.tournament_id;
+                ASSIGN_MATCHES_BY_T[res.tournament_id] = [];
+                assignOnTournamentChange(res.tournament_id);
+                area.style.display = 'none';
+            }
+        } else {
+            const tid = document.getElementById('assign-tournament-sel').value;
+            if (!tid) return;
+            const res = await _assignApi('/api/score/add_match', {name, tournament_id: parseInt(tid)});
+            if (res.ok) {
+                const sel = document.getElementById('assign-match-sel');
+                const o = document.createElement('option');
+                o.value = res.match_id; o.textContent = name;
+                sel.appendChild(o); sel.value = res.match_id;
+                if (!ASSIGN_MATCHES_BY_T[tid]) ASSIGN_MATCHES_BY_T[tid] = [];
+                ASSIGN_MATCHES_BY_T[tid].push({id: res.match_id, name, songs: []});
+                area.style.display = 'none';
+            }
+        }
+    };
+
+    window.openAssignModal = function(songId) {
+        const song = ALL_SONGS.find(s => s.id === songId);
+        if (!song) return;
+        const info = document.getElementById('assign-song-info');
+        info.innerHTML = `<div class="d-flex align-items-center gap-2">
+            ${song.cover_url ? `<img src="${esc(song.cover_url)}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;">` : ''}
+            <div>
+                <div style="font-weight:700;color:var(--gold);">${esc(song.name)}</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);">${esc(song.difficulty)} · ${esc(song.rating)} · ${esc(song.song_type || '')}</div>
+            </div>
+        </div>`;
+        const form = document.getElementById('assign-form');
+        form.action = ADD_ASSIGN_URL + '/' + songId;
+        document.getElementById('assign-title').value = '';
+        document.getElementById('assign-desc').value = '';
+        // 重置 match 选择器
+        document.getElementById('assign-tournament-sel').value = '';
+        const _matchRow = document.getElementById('assign-match-row');
+        _matchRow.style.display = 'none';
+        _matchRow.style.setProperty('display', 'none', 'important');
+        document.getElementById('assign-match-sel').innerHTML = '<option value="">选择 Match</option>';
+        document.getElementById('assign-match-sel').disabled = true;
+        document.getElementById('assign-btn-new-match').disabled = true;
+        document.getElementById('assign-inline-area').style.display = 'none';
+        document.getElementById('modal-assign').style.display = 'flex';
+    };
+    window.closeAssignModal = function() {
+        document.getElementById('modal-assign').style.display = 'none';
+    };
+    // AJAX 提交
+    document.getElementById('assign-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const form = this;
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>创建中…';
+        try {
+            const res = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-Token': CSRF_TOKEN,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: new FormData(form)
+            });
+            const data = await res.json();
+            closeAssignModal();
+            if (data.ok) {
+                // 显示成功提示
+                const toast = document.createElement('div');
+                toast.className = 'alert alert-success position-fixed';
+                toast.style.cssText = 'top:20px;right:20px;z-index:9999;min-width:260px;box-shadow:0 4px 16px rgba(0,0,0,.3);';
+                toast.innerHTML = `<i class="bi bi-check-circle me-2"></i>${esc(data.msg)}`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            }
+        } catch (_) {
+            closeAssignModal();
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-journal-plus me-1"></i>创建课题';
+        }
+    });
+} else {
+    window.openAssignModal = function() {};
+    window.closeAssignModal = function() {};
+}
+
+})();
+</script>
+{% endblock %}

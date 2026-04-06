@@ -1,0 +1,56 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Database
+instance/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# Binaries / tools (not part of the app)
+caddy.exe
+msedgedriver.exe
+
+# Caddy config (deployment-specific)
+Caddyfile
+
+# Archives
+*.7z
+*.zip
+*.tar.gz
+
+# Saved web pages (contains personal info)
+static/maimaiDX.htm
+
+# Driver notes (unrelated)
+Driver_Notes/
+
+# maimai external images (too large for git)
+maimai_images/
+
+# Uploaded files
+static/uploads/
+
+# maimai song covers (obtain from mai-bot, see README)
+static/mai/cover/
+
+# maimai pic resources (only needed files are force-tracked)
+static/mai/pic/
+
+# maimai plate & rating (not used by the app)
+static/mai/plate/
+static/mai/rating/
+
+# Misc
+.png/

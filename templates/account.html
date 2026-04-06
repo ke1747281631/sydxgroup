@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="mb-4">
+    <h2 class="mb-0"><i class="bi bi-person-gear me-2"></i>用户中心</h2>
+    <p class="text-muted mb-0" style="font-size:0.85rem;letter-spacing:1px;">ACCOUNT SETTINGS</p>
+</div>
+
+<div class="acct-grid">
+
+    <!-- ── 账户信息 ── -->
+    <div class="acct-card">
+        <div class="acct-card__header">
+            <i class="bi bi-person-circle me-2"></i>账户信息
+        </div>
+        <div class="acct-card__body">
+            <div class="info-row">
+                <span class="info-label">用户名</span>
+                <span class="info-value">{{ current_user.username }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">角色</span>
+                <span class="info-value">
+                    {% if current_user.is_admin %}
+                    <span class="role-badge admin">管理员</span>
+                    {% else %}
+                    <span class="role-badge">普通用户</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">注册时间</span>
+                <span class="info-value" style="font-family:'Space Mono',monospace;font-size:0.82rem;">
+                    {{ current_user.created_at.strftime('%Y-%m-%d') }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 重置选曲 ── -->
+    <div class="acct-card">
+        <div class="acct-card__header">
+            <i class="bi bi-music-note-list me-2"></i>重置我的选曲
+        </div>
+        <div class="acct-card__body">
+            <p class="acct-desc">清空你已选的全部曲目，之后可以重新选曲。此操作不可撤销。</p>
+            <form method="post" action="{{ url_for('reset_my_selections') }}"
+                  onsubmit="return confirm('确认清空你的所有选曲记录？')">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>清空我的选曲
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── 修改用户名 ── -->
+    <div class="acct-card">
+        <div class="acct-card__header">
+            <i class="bi bi-pencil-square me-2"></i>修改用户名
+        </div>
+        <div class="acct-card__body">
+            <p class="acct-desc">用户名只能包含字母、数字或中文，最长 30 个字符，需验证当前密码。</p>
+            <form method="post" action="{{ url_for('change_username') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="field-label">新用户名</label>
+                    <input type="text" name="new_username" class="form-control form-control-sm"
+                           placeholder="输入新用户名" required maxlength="30"
+                           autocomplete="username">
+                </div>
+                <div class="mb-3">
+                    <label class="field-label">当前密码（验证）</label>
+                    <input type="password" name="password" class="form-control form-control-sm"
+                           placeholder="输入当前密码确认" required
+                           autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn btn-outline-cyan btn-sm">
+                    <i class="bi bi-check2 me-1"></i>确认修改用户名
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── 修改密码 ── -->
+    <div class="acct-card">
+        <div class="acct-card__header">
+            <i class="bi bi-key me-2"></i>修改密码
+        </div>
+        <div class="acct-card__body">
+            <p class="acct-desc">新密码至少 6 位，最长 64 位。修改后下次登录使用新密码。</p>
+            <form method="post" action="{{ url_for('change_password') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="field-label">当前密码</label>
+                    <input type="password" name="old_password" class="form-control form-control-sm"
+                           placeholder="输入当前密码" required
+                           autocomplete="current-password">
+                </div>
+                <div class="mb-3">
+                    <label class="field-label">新密码</label>
+                    <input type="password" name="new_password" class="form-control form-control-sm"
+                           placeholder="至少 6 位" required minlength="6" maxlength="64"
+                           autocomplete="new-password">
+                </div>
+                <div class="mb-3">
+                    <label class="field-label">确认新密码</label>
+                    <input type="password" name="confirm_password" class="form-control form-control-sm"
+                           placeholder="再次输入新密码" required
+                           autocomplete="new-password">
+                </div>
+                <button type="submit" class="btn btn-outline-cyan btn-sm">
+                    <i class="bi bi-check2 me-1"></i>确认修改密码
+                </button>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+<style>
+.acct-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    max-width: 860px;
+}
+
+.acct-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg-card);
+}
+
+.acct-card__header {
+    padding: 12px 18px;
+    background: rgba(0,220,255,0.05);
+    border-bottom: 1px solid var(--border);
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--cyan);
+    letter-spacing: 1px;
+}
+
+.acct-card__body {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.acct-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* 账户信息行 */
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.info-row:last-child { border-bottom: none; }
+.info-label { font-size: 0.78rem; color: var(--text-muted); }
+.info-value { font-size: 0.88rem; color: var(--text-main); font-weight: 500; }
+
+.role-badge {
+    font-size: 0.7rem; font-weight: 700;
+    padding: 2px 10px; border-radius: 999px;
+    background: rgba(0,220,255,0.1);
+    color: var(--cyan);
+    border: 1px solid rgba(0,220,255,0.25);
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 0.5px;
+}
+.role-badge.admin {
+    background: rgba(255,209,102,0.12);
+    color: var(--gold);
+    border-color: rgba(255,209,102,0.3);
+}
+
+/* 表单 */
+.field-label { display:block; font-size:0.75rem; color:var(--text-muted); margin-bottom:4px; }
+.form-control {
+    background: rgba(13,20,33,0.9) !important;
+    border-color: var(--border) !important;
+    color: var(--text-main) !important;
+}
+.form-control:focus {
+    border-color: var(--cyan) !important;
+    box-shadow: 0 0 0 2px rgba(0,220,255,0.12) !important;
+}
+
+.btn-outline-cyan {
+    border: 1px solid var(--cyan); color: var(--cyan);
+    background: transparent; font-size: 0.82rem;
+    padding: 5px 16px; border-radius: 6px;
+    transition: all .15s;
+}
+.btn-outline-cyan:hover { background: rgba(0,220,255,0.1); color: var(--cyan); }
+</style>
+{% endblock %}
