@@ -836,6 +836,7 @@ def lottery():
         return redirect(url_for('dashboard'))
     prizes = PrizePool.query.all()
     from sqlalchemy.orm import joinedload as _jl
+    tournaments = Tournament.query.order_by(Tournament.created_at.desc()).all()
     matches_raw = (Match.query
                    .options(_jl(Match.songs), _jl(Match.entries))
                    .order_by(Match.sort_order, Match.id).all())
@@ -848,14 +849,20 @@ def lottery():
             if e.player_name not in all_players:
                 all_players[e.player_name] = []
             all_players[e.player_name].append({
-                'match_id': m.id, 'match_name': m.name, 'result': e.result or ''
+                'match_id': m.id, 'match_name': m.name,
+                'tournament_id': m.tournament_id or 0,
+                'result': e.result or ''
             })
-        matches_info.append({'id': m.id, 'name': m.name, 'entries': entries})
+        matches_info.append({'id': m.id, 'name': m.name,
+                             'tournament_id': m.tournament_id or 0,
+                             'entries': entries})
     players = [{'name': name, 'matches': matches} for name, matches in all_players.items()]
     participants = LotteryParticipant.query.order_by(LotteryParticipant.added_at).all()
+    tournaments_info = [{'id': t.id, 'name': t.name, 'is_active': t.is_active} for t in tournaments]
     return render_template('lottery.html', prizes=prizes,
                            players=players, matches_info=matches_info,
-                           participants=participants)
+                           participants=participants,
+                           tournaments=tournaments_info)
 
 
 @app.route('/lottery/participant/add', methods=['POST'])
@@ -934,6 +941,36 @@ def lottery_participant_clear():
     db.session.commit()
     sse_broadcast('lottery', {'type': 'participants_update', 'participants': []})
     flash(f'已清空抽奖参与者名单（共 {count} 人）', 'success')
+    return redirect(url_for('lottery'))
+
+
+@app.route('/lottery/participant/import_tournament/<int:tid>', methods=['POST'])
+@admin_required
+@csrf_protect
+def lottery_participant_import_tournament(tid):
+    """从指定赛事的选手名单批量导入抽奖参与者"""
+    tournament = db.session.get(Tournament, tid) or abort(404)
+    matches = Match.query.filter_by(tournament_id=tid).all()
+    match_ids = [m.id for m in matches]
+    if not match_ids:
+        flash(f'赛事「{tournament.name}」暂无比赛数据', 'warning')
+        return redirect(url_for('lottery'))
+    entries = MatchEntry.query.filter(MatchEntry.match_id.in_(match_ids)).all()
+    names = sorted({e.player_name for e in entries if e.player_name})
+    added, skipped = 0, 0
+    for name in names:
+        if LotteryParticipant.query.filter_by(name=name).first():
+            skipped += 1
+            continue
+        db.session.add(LotteryParticipant(name=name[:100]))
+        added += 1
+    db.session.commit()
+    participants = LotteryParticipant.query.order_by(LotteryParticipant.added_at).all()
+    sse_broadcast('lottery', {
+        'type': 'participants_update',
+        'participants': [{'id': x.id, 'name': x.name, 'remark': x.remark or ''} for x in participants],
+    })
+    flash(f'从赛事「{tournament.name}」导入完成：新增 {added} 人，跳过 {skipped} 人（已存在）', 'success')
     return redirect(url_for('lottery'))
 
 

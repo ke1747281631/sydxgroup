@@ -74,6 +74,8 @@ python songs.py
 
 将从 diving-fish API 拉取最新曲目数据并写入 `songs.csv`。
 
+> **歌曲数据来源**：[https://maimai.diving-fish.com/](https://maimai.diving-fish.com/)，包括现行国服曲库。如需日服曲库，可尝试从日服官网爬取。
+
 ### 5. 获取歌曲封面及图片资源
 
 歌曲封面图片（`static/mai/cover/`）未包含在仓库中，请按以下步骤获取：

@@ -110,6 +110,26 @@
         </button>
     </div>
 
+    <!-- 从赛事导入 -->
+    {% if tournaments %}
+    <div class="mb-3 p-3" style="background:rgba(255,209,102,0.04);border:1px solid rgba(255,209,102,0.2);border-radius:8px;">
+        <div style="font-size:0.75rem;color:var(--gold);margin-bottom:8px;letter-spacing:1px;">
+            <i class="bi bi-box-arrow-in-down me-1"></i>从赛事导入参与者
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            {% for t in tournaments %}
+            <form method="post" action="{{ url_for('lottery_participant_import_tournament', tid=t.id) }}" class="d-inline"
+                  onsubmit="return confirm('确定从赛事「{{ t.name }}」导入选手到参与者名单？已存在的选手会自动跳过。')">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm" style="font-size:0.75rem;padding:3px 10px;border:1px solid rgba(255,209,102,0.4);color:var(--gold);background:rgba(255,209,102,0.08);border-radius:999px;">
+                    <i class="bi bi-download me-1"></i>{{ t.name }}{% if t.is_active %} <span style="font-size:0.6rem;opacity:0.7;">●当前</span>{% endif %}
+                </button>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- 已有参与者 -->
     <div class="d-flex flex-wrap gap-2 mb-3" id="participant-tags">
         {% for p in participants %}
@@ -190,6 +210,16 @@
         <h3 class="mb-0" style="font-size:1rem;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);">
             计分选手池
         </h3>
+        {% if tournaments %}
+        <select id="tournament-filter" class="form-select form-select-sm"
+                style="width:auto;max-width:200px;font-size:0.78rem;padding:2px 28px 2px 8px;"
+                onchange="filterByTournament(this.value)">
+            <option value="0">全部赛事</option>
+            {% for t in tournaments %}
+            <option value="{{ t.id }}">{{ t.name }}{% if t.is_active %} ●{% endif %}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
         <span class="badge"
               style="background:rgba(0,220,255,0.15);color:var(--cyan);font-family:'Space Mono',monospace;">
             候选：<span id="filtered-count">{{ players | length }}</span> / <span id="pool-total">{{ players | length }}</span>
@@ -408,7 +438,9 @@
 <script>
 const ALL_PLAYERS    = {{ players | tojson }};
 const ALL_PARTICIPANTS = {{ participants | map(attribute='name') | list | tojson }};
+const MATCHES_INFO   = {{ matches_info | tojson }};
 const _excludedPlayers = new Set();  // 手动排除的选手名
+let _currentTournamentId = 0;        // 0 = 全部赛事
 
 // 持久化排除状态到 sessionStorage（刷新内保留）
 function _saveExcluded() {
@@ -469,10 +501,50 @@ function applyPlayerFilter() {
 let activeFilters = new Set(['all']);  // 支持多选
 let filteredPlayers = [];
 
+function getPlayersForTournament() {
+    // 返回当前赛事下的选手（按 tournament_id 过滤）
+    if (_currentTournamentId === 0) return ALL_PLAYERS;
+    return ALL_PLAYERS.filter(p =>
+        p.matches.some(m => m.tournament_id === _currentTournamentId)
+    );
+}
+
+function getMatchesForTournament() {
+    if (_currentTournamentId === 0) return MATCHES_INFO;
+    return MATCHES_INFO.filter(m => m.tournament_id === _currentTournamentId);
+}
+
+function filterByTournament(val) {
+    _currentTournamentId = parseInt(val) || 0;
+    // 重置场次筛选到"全部"
+    activeFilters = new Set(['all']);
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    const allChip = document.querySelector('[data-filter="all"]');
+    if (allChip) allChip.classList.add('active');
+    // 重建场次筛选按钮
+    rebuildFilterChips();
+    updatePlayerTags();
+}
+
+function rebuildFilterChips() {
+    const container = document.getElementById('filter-chips');
+    if (!container) return;
+    const matches = getMatchesForTournament();
+    // 保留"全部"按钮，重建场次按钮
+    let html = '<button class="filter-chip active" data-filter="all" onclick="toggleFilter(\'all\', this)">全部</button>';
+    matches.forEach(m => {
+        html += `<button class="filter-chip" data-filter="advance-${m.id}" onclick="toggleFilter('advance-${m.id}', this)">${m.name} · 晋级</button>`;
+        html += `<button class="filter-chip" data-filter="wait-${m.id}" onclick="toggleFilter('wait-${m.id}', this)">${m.name} · 候补</button>`;
+        html += `<button class="filter-chip" data-filter="out-${m.id}" onclick="toggleFilter('out-${m.id}', this)">${m.name} · 淘汰</button>`;
+    });
+    container.innerHTML = html;
+}
+
 function getFiltered() {
-    if (activeFilters.has('all')) return ALL_PLAYERS.map(p => p.name);
+    const pool = getPlayersForTournament();
+    if (activeFilters.has('all')) return pool.map(p => p.name);
     const resultMap = { advance: '晋级', wait: '候补', out: '淘汰' };
-    return ALL_PLAYERS.filter(player => {
+    return pool.filter(player => {
         return [...activeFilters].some(filter => {
             const parts = filter.split('-');
             const status = parts[0];
@@ -508,11 +580,11 @@ function toggleFilter(filter, btn) {
 
 function updatePlayerTags() {
     const inFilter = new Set(getFiltered());
-    // hidden = 不在当前场次筛选范围内（与排除状态无关）
+    const inTournament = new Set(getPlayersForTournament().map(p => p.name));
+    // hidden = 不在当前赛事+场次筛选范围内
     document.querySelectorAll('.player-tag').forEach(tag => {
         const name = tag.dataset.name;
-        tag.classList.toggle('hidden', !inFilter.has(name));
-        // 恢复排除状态（切换分类后重新应用）
+        tag.classList.toggle('hidden', !inTournament.has(name) || !inFilter.has(name));
         tag.classList.toggle('excluded', _excludedPlayers.has(name));
     });
     applyPlayerFilter();
@@ -520,12 +592,12 @@ function updatePlayerTags() {
 
 // 初始化：加载持久化的排除状态
 _loadExcluded();
-filteredPlayers = ALL_PLAYERS.filter(p => !_excludedPlayers.has(p.name)).map(p => p.name);
+filteredPlayers = getPlayersForTournament().filter(p => !_excludedPlayers.has(p.name)).map(p => p.name);
 // 恢复标签的 excluded 样式
 document.querySelectorAll('.player-tag').forEach(tag => {
     if (_excludedPlayers.has(tag.dataset.name)) tag.classList.add('excluded');
 });
-document.getElementById('pool-total') && (document.getElementById('pool-total').textContent = ALL_PLAYERS.length);
+document.getElementById('pool-total') && (document.getElementById('pool-total').textContent = getPlayersForTournament().length);
 const fcInit = document.getElementById('filtered-count');
 if (fcInit) fcInit.textContent = filteredPlayers.length;
 
