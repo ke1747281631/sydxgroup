@@ -133,6 +133,10 @@ python app.py
 - 使用 Caddy / Nginx 作为反向代理并启用 HTTPS
 - 定期备份 `instance/app.db` 数据库文件
 
+## 声明
+
+本项目代码由 AI 协助完成。
+
 ## 许可
 
 MIT
